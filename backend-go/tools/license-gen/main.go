@@ -16,32 +16,7 @@ import (
 	"time"
 )
 
-// Default Embedded Private Key for Generator Tool (Keep secure, used by admin)
-const AdminPrivateKeyPEM = `-----BEGIN RSA PRIVATE KEY-----
-MIIEowIBAAKCAQEA1Hn74M9rL8V2QzW6K0sCO2uAknx7sXG6qf+U+k5Y5c4q8I7A
-3H1u9K2b6v+W0e4i7k1n5q9r2u5t8w1x3y4zA5b6c7d8e9f0a1b2c3d4e5f6a7b8
-c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6C7d8e9f0a1b2c3d4e5f6a7b8c9d0
-e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8E9f0a1b2c3d4e5f6a7b8c9d0e1f2
-a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0A1b2c3d4e5f6a7b8c9d0e1f2a3b4
-c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2CwIDAQABAoIBAQCpE2lq5m8eN4Z0
-yqXkZ6kU5b9q+w8l1k2m3n4p5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0a1b2c3d4e
-5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a
-7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c
-9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e
-1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0AECgYEA9gT7p3m6q2v9x1y4
-z5a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8
-b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6
-d5e4f3a2b1c0d9e8f7a6CgYEA3Hn74M9rL8V2QzW6K0sCO2uAknx7sXG6qf+U+k5Y
-5c4q8I7A3H1u9K2b6v+W0e4i7k1n5q9r2u5t8w1x3y4zA5b6c7d8e9f0a1b2c3d4
-e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6
-CgYEA5v6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4
-a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6
-c7d8e9f0a1b2c3d4e5f6CgYEA7k1n5q9r2u5t8w1x3y4zA5b6c7d8e9f0a1b2c3d4
-e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6
-a7b8c9d0e1f2a3b4c5d6e7f8CgEBAI7A3H1u9K2b6v+W0e4i7k1n5q9r2u5t8w1x
-3y4zA5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4
-a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6
------END RSA PRIVATE KEY-----`
+const bannerSeparator = "======================================================="
 
 type LicenseClaims struct {
 	MachineCode string `json:"machine_code"`
@@ -49,12 +24,42 @@ type LicenseClaims struct {
 	MaxRoutes   int    `json:"max_routes"`
 	ExpiresAt   string `json:"expires_at"` // YYYY-MM-DD
 	IssuedAt    string `json:"issued_at"`
-	Type        string `json:"type"`       // PRODUCTION, TRIAL, ENTERPRISE
+	Type        string `json:"type"` // PRODUCTION, TRIAL, ENTERPRISE
 }
 
 type LicensePayload struct {
 	Claims    LicenseClaims `json:"claims"`
 	Signature string        `json:"signature"`
+}
+
+func loadPrivateKeyBytes(customPath string) ([]byte, error) {
+	if customPath != "" {
+		if b, err := os.ReadFile(customPath); err == nil {
+			return b, nil
+		}
+	}
+	if envPath := os.Getenv("ADMIN_PRIVATE_KEY_PATH"); envPath != "" {
+		if b, err := os.ReadFile(envPath); err == nil {
+			return b, nil
+		}
+	}
+	if envKey := os.Getenv("ADMIN_PRIVATE_KEY"); envKey != "" {
+		return []byte(envKey), nil
+	}
+
+	// Default fallback locations
+	candidates := []string{
+		"admin_private.pem",
+		"tools/license-gen/admin_private.pem",
+		"backend-go/tools/license-gen/admin_private.pem",
+	}
+	for _, p := range candidates {
+		if b, err := os.ReadFile(p); err == nil {
+			return b, nil
+		}
+	}
+
+	return nil, fmt.Errorf("file private key tidak ditemukan di '%s' atau path default (admin_private.pem)", customPath)
 }
 
 func main() {
@@ -64,6 +69,7 @@ func main() {
 	days := flag.Int("days", 365, "Masa aktif dalam hari")
 	licType := flag.String("type", "PRODUCTION", "Tipe lisensi (TRIAL, PRODUCTION, ENTERPRISE)")
 	output := flag.String("out", "license.key", "Nama file output lisensi")
+	keyPath := flag.String("key", "admin_private.pem", "Path ke file RSA private key PEM")
 	flag.Parse()
 
 	if *machineCode == "" {
@@ -91,7 +97,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	block, _ := pem.Decode([]byte(AdminPrivateKeyPEM))
+	keyBytes, err := loadPrivateKeyBytes(*keyPath)
+	if err != nil {
+		fmt.Printf("❌ Error memuat private key: %v\n", err)
+		fmt.Println("Silakan sediakan file private key dengan flag -key <path/ke/admin_private.pem>")
+		os.Exit(1)
+	}
+
+	block, _ := pem.Decode(keyBytes)
 	if block == nil {
 		fmt.Println("Error decoding private key PEM")
 		os.Exit(1)
@@ -126,9 +139,9 @@ func main() {
 	}
 
 	absPath, _ := filepath.Abs(*output)
-	fmt.Println("=======================================================")
+	fmt.Println(bannerSeparator)
 	fmt.Println("✅ LISENSI BERHASIL DIBUAT DENGAN TANDA TANGAN RSA")
-	fmt.Println("=======================================================")
+	fmt.Println(bannerSeparator)
 	fmt.Printf("Klien        : %s\n", claims.Customer)
 	fmt.Printf("Kode Mesin   : %s\n", claims.MachineCode)
 	fmt.Printf("Tipe         : %s\n", claims.Type)
@@ -138,5 +151,5 @@ func main() {
 	fmt.Println("-------------------------------------------------------")
 	fmt.Println("Kunci Lisensi (Salin string berikut jika input manual):")
 	fmt.Println(licenseBase64)
-	fmt.Println("=======================================================")
+	fmt.Println(bannerSeparator)
 }
