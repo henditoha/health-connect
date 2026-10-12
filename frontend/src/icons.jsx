@@ -50,5 +50,8 @@ export const ShieldCheck = makeIcon('ShieldCheck', <><path d="M20 13c0 5-3.5 7.5
 export const Zap = makeIcon('Zap', <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />);
 export const HeartPulse = makeIcon('HeartPulse', <><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" /><path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27" /></>);
 export const Network = makeIcon('Network', <><rect x="16" y="16" width="6" height="6" rx="1" /><rect x="2" y="16" width="6" height="6" rx="1" /><rect x="9" y="2" width="6" height="6" rx="1" /><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3" /><path d="M12 12V8" /></>);
+export const Award = makeIcon('Award', <><circle cx="12" cy="8" r="6" /><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11" /></>);
+export const Copy = makeIcon('Copy', <><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></>);
+export const Check = makeIcon('Check', <polyline points="20 6 9 17 4 12" />);
 
 

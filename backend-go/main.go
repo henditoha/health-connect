@@ -67,6 +67,8 @@ func main() {
 		panic(err)
 	}
 
+	InitLicenseSystem()
+
 	engine = NewIntegrationEngine()
 	engine.LoadActiveRoutes()
 	engine.StartQueueWorker()
@@ -88,11 +90,15 @@ func main() {
 		api.POST("/test-connection", testConnection)
 		api.PUT("/routes/:id/toggle", toggleRoute)
 		api.POST("/routes/:id/clone", cloneRoute)
+		api.DELETE("/routes/:id", deleteRoute)
 		
 		api.GET("/variables", getVariables)
 		api.POST("/variables", createVariable)
 		api.PUT("/variables/:id", updateVariable)
 		api.DELETE("/variables/:id", deleteVariable)
+
+		api.GET("/license", getLicenseInfo)
+		api.POST("/license/activate", activateLicense)
 
 		api.POST("/login", login)
 		api.GET("/users", getUsers)
@@ -189,6 +195,11 @@ func getRoutes(c *gin.Context) {
 }
 
 func createRoute(c *gin.Context) {
+	if err := CheckCanCreateRoute(); err != nil {
+		c.JSON(403, gin.H{"error": err.Error()})
+		return
+	}
+
 	var input struct {
 		Name        string `json:"name"`
 		Description string `json:"description"`
@@ -225,6 +236,10 @@ func toggleRoute(c *gin.Context) {
 
 	newStatus := 0
 	if !r.Active {
+		if err := CheckMaxRouteLimit(); err != nil {
+			c.JSON(403, gin.H{"error": err.Error()})
+			return
+		}
 		newStatus = 1
 	}
 
@@ -239,6 +254,11 @@ func toggleRoute(c *gin.Context) {
 }
 
 func cloneRoute(c *gin.Context) {
+	if err := CheckCanCreateRoute(); err != nil {
+		c.JSON(403, gin.H{"error": err.Error()})
+		return
+	}
+
 	id := c.Param("id")
 	r, exists := engine.Routes[id]
 	if !exists {
@@ -267,6 +287,21 @@ func cloneRoute(c *gin.Context) {
 
 	engine.LoadActiveRoutes()
 	c.JSON(200, gin.H{"id": newId, "message": "Route cloned successfully"})
+}
+
+func deleteRoute(c *gin.Context) {
+	if err := CheckCanDeleteRoute(); err != nil {
+		c.JSON(403, gin.H{"error": err.Error()})
+		return
+	}
+
+	id := c.Param("id")
+	db.Exec("DELETE FROM endpoints WHERE route_id=?", id)
+	db.Exec("DELETE FROM transformers WHERE route_id=?", id)
+	db.Exec("DELETE FROM routes WHERE id=?", id)
+
+	engine.LoadActiveRoutes()
+	c.JSON(200, gin.H{"message": "Route deleted successfully"})
 }
 
 func updateRoute(c *gin.Context) {

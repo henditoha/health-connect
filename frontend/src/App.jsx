@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, TerminalSquare, ChevronDown, ChevronRight, Menu, LayoutDashboard, GitMerge, KeyRound, Users as UsersIcon, LogOut, ArrowUpRight, Layers, ShieldCheck, HeartPulse, Network } from './icons';
+import { Plus, TerminalSquare, ChevronDown, ChevronRight, Menu, LayoutDashboard, GitMerge, KeyRound, Users as UsersIcon, LogOut, ArrowUpRight, Layers, ShieldCheck, HeartPulse, Network, Award, Copy, Check } from './icons';
 import ChannelEditor from './ChannelEditor';
 import faviconLogo from '../assets/favicon.ico';
 
@@ -47,6 +47,309 @@ function TargetBadges({ endpoints }) {
   });
 }
 
+function getLicenseBadge(licenseInfo) {
+  const isValid = licenseInfo?.valid === true;
+  const isTrial = licenseInfo?.is_trial === true;
+  const isExpired = licenseInfo?.status_text === 'TRIAL_EXPIRED' || licenseInfo?.status_text === 'EXPIRED';
+
+  if (isTrial && isExpired) {
+    return { color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)', text: '✕ Masa Trial Telah Berakhir' };
+  }
+  if (isTrial) {
+    return { color: '#D97706', bg: 'rgba(217, 119, 6, 0.12)', text: '⏱ Mode Trial (Uji Coba)' };
+  }
+  if (isExpired) {
+    return { color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)', text: '✕ Lisensi Kadaluarsa' };
+  }
+  if (!isValid) {
+    return { color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)', text: '✕ Belum Terlisensi' };
+  }
+  return { color: '#10B981', bg: 'rgba(16, 185, 129, 0.12)', text: '✓ Lisensi Resmi Aktif' };
+}
+
+function getDaysLeftColor(daysLeft, isTrial) {
+  if (daysLeft <= 3) return '#EF4444';
+  if (isTrial) return '#D97706';
+  return '#10B981';
+}
+
+function LicenseMachineCard({ machineCode, copiedCode, onCopy }) {
+  return (
+    <div style={{
+      backgroundColor: 'var(--bg-card)',
+      border: '1px solid var(--border)',
+      borderRadius: '12px',
+      padding: '1.5rem',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.03)'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Award size={20} color="var(--primary)" /> ID Mesin Laptop / Server
+          </h3>
+          <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            Hardware ID unik mesin yang terkunci pada perangkat fisik Anda (Windows, macOS, atau Linux).
+          </p>
+        </div>
+        <span style={{
+          fontSize: '0.75rem',
+          fontWeight: 700,
+          padding: '0.25rem 0.6rem',
+          borderRadius: '999px',
+          backgroundColor: 'var(--primary-light)',
+          color: 'var(--primary)'
+        }}>
+          Hardware ID
+        </span>
+      </div>
+
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.75rem',
+        backgroundColor: 'var(--bg-subtle)',
+        padding: '0.85rem 1.2rem',
+        borderRadius: '8px',
+        border: '1px dashed var(--border)',
+        flexWrap: 'wrap'
+      }}>
+        <code style={{
+          fontFamily: 'Consolas, Monaco, monospace',
+          fontSize: '1.2rem',
+          fontWeight: 700,
+          letterSpacing: '0.08em',
+          color: 'var(--primary)',
+          flex: 1
+        }}>
+          {machineCode || 'Membaca ID mesin...'}
+        </code>
+        <button
+          className="btn btn-primary"
+          onClick={onCopy}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem' }}
+        >
+          {copiedCode ? <Check size={16} /> : <Copy size={16} />}
+          {copiedCode ? 'Tersalin!' : 'Salin ID Mesin'}
+        </button>
+      </div>
+      <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+        💡 Salin <b>ID Mesin</b> di atas dan gunakan pada generator lisensi untuk membuat kunci lisensi resmi Rumah Sakit / Klien Anda.
+      </div>
+    </div>
+  );
+}
+
+function LicenseStatusCard({ licenseInfo, totalRouteCount, activeRouteCount }) {
+  const isValid = licenseInfo?.valid === true;
+  const isTrial = licenseInfo?.is_trial === true;
+  const isExpired = licenseInfo?.status_text === 'TRIAL_EXPIRED' || licenseInfo?.status_text === 'EXPIRED';
+  const maxRoutes = licenseInfo?.max_routes || 10;
+  const isExceeded = maxRoutes > 0 && totalRouteCount > maxRoutes;
+  const badge = getLicenseBadge(licenseInfo);
+  const daysLeftColor = getDaysLeftColor(licenseInfo?.days_left ?? 0, isTrial);
+
+  const formattedExpiry = licenseInfo?.expires_at
+    ? new Date(licenseInfo.expires_at).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })
+    : '-';
+
+  const daysRemainingText = licenseInfo?.days_left === 0 ? 'Hari ini berakhir' : `Sisa ${licenseInfo?.days_left} hari lagi`;
+  const licenseTypeText = isTrial ? 'Trial (Masa Uji Coba)' : (licenseInfo?.type || 'Produksi');
+  const routeQuotaText = `${totalRouteCount} / ${maxRoutes > 0 ? maxRoutes : 'Unlimited'} Channel`;
+
+  return (
+    <div style={{
+      backgroundColor: 'var(--bg-card)',
+      border: '1px solid var(--border)',
+      borderRadius: '12px',
+      padding: '1.5rem',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.03)'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--primary)' }}>
+            Status Lisensi & Masa Berlaku
+          </h3>
+          <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            {licenseInfo?.message || 'Memeriksa status lisensi...'}
+          </p>
+        </div>
+        <span style={{
+          padding: '0.4rem 0.9rem',
+          borderRadius: '999px',
+          fontSize: '0.85rem',
+          fontWeight: 700,
+          backgroundColor: badge.bg,
+          color: badge.color,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.4rem'
+        }}>
+          {badge.text}
+        </span>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem' }}>
+        <div style={{ padding: '0.85rem', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Tipe Lisensi</div>
+          <div style={{ fontWeight: 700, fontSize: '0.95rem', color: isTrial ? '#D97706' : 'var(--text-main)' }}>
+            {licenseTypeText}
+          </div>
+        </div>
+
+        <div style={{ padding: '0.85rem', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Instansi / Klien</div>
+          <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-main)' }}>
+            {licenseInfo?.customer || '-'}
+          </div>
+        </div>
+
+        <div style={{ padding: '0.85rem', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+            {isTrial ? 'Tanggal Kadaluarsa Trial' : 'Tanggal Kadaluarsa'}
+          </div>
+          <div style={{ fontWeight: 700, fontSize: '0.95rem', color: isExpired ? '#EF4444' : 'var(--text-main)' }}>
+            {formattedExpiry}
+          </div>
+          {isValid && licenseInfo?.days_left !== undefined && (
+            <div style={{
+              fontSize: '0.75rem',
+              color: daysLeftColor,
+              marginTop: '0.2rem',
+              fontWeight: 600
+            }}>
+              {daysRemainingText}
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: '0.85rem', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Kuota Channel (Total)</div>
+          <div style={{ fontWeight: 700, fontSize: '0.95rem', color: isExceeded ? '#EF4444' : 'var(--text-main)' }}>
+            {routeQuotaText}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+            {activeRouteCount} Aktif (Enable) | {totalRouteCount - activeRouteCount} Nonaktif (Disabled)
+          </div>
+          {isExceeded && (
+            <div style={{ fontSize: '0.75rem', color: '#EF4444', marginTop: '0.2rem', fontWeight: 600 }}>
+              Melebihi kuota lisensi!
+            </div>
+          )}
+        </div>
+      </div>
+
+      {isTrial && (
+        <div style={{
+          marginTop: '1rem',
+          padding: '0.65rem 0.9rem',
+          borderRadius: '6px',
+          backgroundColor: 'rgba(217, 119, 6, 0.08)',
+          border: '1px solid rgba(217, 119, 6, 0.2)',
+          fontSize: '0.8rem',
+          color: '#B45309'
+        }}>
+          ℹ️ <b>Ketentuan Evaluasi Trial:</b> Batas maksimal <b>10 channel</b> (dihitung baik status Enable maupun Disabled). Channel yang sudah dibuat <b>tidak dapat dihapus</b> selama masa trial.
+        </div>
+      )}
+
+      <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-light)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+        📁 <b>Lokasi Berkas di Mesin:</b>{' '}
+        <code style={{ fontFamily: 'monospace', color: 'var(--primary)' }}>
+          {licenseInfo?.file_path || 'license.key'}
+        </code>
+      </div>
+    </div>
+  );
+}
+
+function LicenseActivationCard({ licenseKeyInput, setLicenseKeyInput, licenseMsg, setLicenseMsg, onActivate, machineCode }) {
+  const isSuccess = licenseMsg?.type === 'success';
+  const alertBg = isSuccess ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+  const alertColor = isSuccess ? '#047857' : '#DC2626';
+  const alertBorder = isSuccess ? '#A7F3D0' : '#FECACA';
+
+  return (
+    <div style={{
+      backgroundColor: 'var(--bg-card)',
+      border: '1px solid var(--border)',
+      borderRadius: '12px',
+      padding: '1.5rem',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.03)'
+    }}>
+      <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem', fontWeight: 700, color: 'var(--primary)' }}>
+        Input License Key yang Dibuat
+      </h3>
+      <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+        Tempelkan (paste) teks License Key terenkripsi yang telah digenerate dari tool lisensi untuk ID Mesin ini.
+      </p>
+
+      {licenseMsg?.text && (
+        <div style={{
+          padding: '0.75rem 1rem',
+          borderRadius: '6px',
+          marginBottom: '1rem',
+          fontSize: '0.875rem',
+          backgroundColor: alertBg,
+          color: alertColor,
+          border: `1px solid ${alertBorder}`
+        }}>
+          {licenseMsg.text}
+        </div>
+      )}
+
+      <form onSubmit={onActivate}>
+        <textarea
+          className="form-control"
+          rows={4}
+          placeholder="Tempelkan teks License Key di sini (contoh: eyJjdXN0b21lciI6...)"
+          value={licenseKeyInput}
+          onChange={e => setLicenseKeyInput(e.target.value)}
+          style={{
+            width: '100%',
+            fontFamily: 'Consolas, Monaco, monospace',
+            fontSize: '0.85rem',
+            padding: '0.75rem',
+            borderRadius: '8px',
+            border: '1px solid var(--border)',
+            marginBottom: '1rem',
+            resize: 'vertical'
+          }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => { setLicenseKeyInput(''); setLicenseMsg({ text: '', type: '' }); }}
+            disabled={!licenseKeyInput && !licenseMsg?.text}
+          >
+            Bersihkan
+          </button>
+          <button type="submit" className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+            <ShieldCheck size={16} /> Aktivasi License Key
+          </button>
+        </div>
+      </form>
+
+      <div style={{
+        marginTop: '1.25rem',
+        padding: '1rem',
+        backgroundColor: 'var(--bg-subtle)',
+        borderRadius: '8px',
+        border: '1px solid var(--border-light)',
+        fontSize: '0.82rem',
+        color: 'var(--text-muted)'
+      }}>
+        <div style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.35rem' }}>
+          🛠 Cara Menerbitkan License Key via CLI Generator (Admin):
+        </div>
+        <code>
+          go run ./tools/license-gen -machine &quot;{machineCode || 'ID-MESIN'}&quot; -customer &quot;RS Hermina&quot; -days 365 -max-routes 10
+        </code>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [routes, setRoutes] = useState([]);
   const [logs, setLogs] = useState([]);
@@ -77,6 +380,11 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [stats, setStats] = useState({});
 
+  const [licenseInfo, setLicenseInfo] = useState(null);
+  const [licenseKeyInput, setLicenseKeyInput] = useState('');
+  const [licenseMsg, setLicenseMsg] = useState({ text: '', type: '' });
+  const [copiedCode, setCopiedCode] = useState(false);
+
   useEffect(() => {
     if (token) {
       void fetchGroups();
@@ -84,6 +392,7 @@ function App() {
       void fetchVariables();
       void fetchLogs(1);
       void fetchStats();
+      void fetchLicense();
       const timer = setInterval(() => { void fetchStats(); }, 5000);
       return () => clearInterval(timer);
     }
@@ -181,14 +490,20 @@ function App() {
     if (!name) return;
 
     try {
-      await fetch(`${API_BASE}/routes`, {
+      const res = await fetch(`${API_BASE}/routes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, description: 'New healthcare channel', group_name: '' })
       });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Gagal membuat channel.");
+        return;
+      }
       void fetchRoutes();
     } catch (e) {
       console.error(e);
+      alert("Gagal menghubungi server");
     }
   };
 
@@ -209,7 +524,12 @@ function App() {
 
   const toggleRoute = async (id) => {
     try {
-      await fetch(`${API_BASE}/routes/${id}/toggle`, { method: 'PUT' });
+      const res = await fetch(`${API_BASE}/routes/${id}/toggle`, { method: 'PUT' });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || "Gagal mengubah status channel.");
+        return;
+      }
       void fetchRoutes();
     } catch (e) {
       console.error(e);
@@ -218,10 +538,40 @@ function App() {
 
   const cloneRoute = async (id) => {
     try {
-      await fetch(`${API_BASE}/routes/${id}/clone`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/routes/${id}/clone`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Gagal menggandakan channel.");
+        return;
+      }
       void fetchRoutes();
     } catch (e) {
       console.error(e);
+      alert("Gagal menghubungi server");
+    }
+  };
+
+  const deleteRoute = async (id) => {
+    if (licenseInfo?.is_trial) {
+      alert("Channel tidak dapat dihapus selama mode evaluasi Trial.");
+      return;
+    }
+    const route = routes.find(r => r.id === id);
+    if (!confirm(`Apakah Anda yakin ingin menghapus channel "${route?.name || id}"?`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/routes/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Gagal menghapus channel.");
+        return;
+      }
+      setSelectedRouteId(null);
+      void fetchRoutes();
+    } catch (e) {
+      console.error(e);
+      alert("Gagal menghubungi server");
     }
   };
 
@@ -968,6 +1318,76 @@ function App() {
     </div>
   );
 
+  const fetchLicense = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/license`);
+      const data = await res.json();
+      setLicenseInfo(data);
+    } catch (e) {
+      console.error("Failed to fetch license", e);
+    }
+  };
+
+  const handleActivateLicense = async (e) => {
+    e?.preventDefault();
+    if (!licenseKeyInput.trim()) {
+      setLicenseMsg({ text: 'Mohon tempelkan (paste) kode lisensi terlebih dahulu', type: 'error' });
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/license/activate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ license_key: licenseKeyInput.trim() })
+      });
+      const data = await res.json();
+      if (res.ok && data.valid) {
+        setLicenseMsg({ text: `Lisensi berhasil diaktifkan untuk: ${data.customer}`, type: 'success' });
+        setLicenseKeyInput('');
+        void fetchLicense();
+      } else {
+        setLicenseMsg({ text: data.error || 'Aktivasi lisensi gagal. Periksa kembali kode lisensi dan Machine Code.', type: 'error' });
+      }
+    } catch (e) {
+      setLicenseMsg({ text: 'Gagal menghubungi server backend: ' + e.message, type: 'error' });
+    }
+  };
+
+  const copyMachineCode = async () => {
+    if (licenseInfo?.machine_code) {
+      try {
+        await navigator.clipboard?.writeText(licenseInfo.machine_code);
+        setCopiedCode(true);
+        setTimeout(() => setCopiedCode(false), 2000);
+      } catch (err) {
+        console.error('Failed to copy machine code', err);
+      }
+    }
+  };
+
+  const renderLicenseView = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: '1000px' }}>
+      <LicenseMachineCard
+        machineCode={licenseInfo?.machine_code}
+        copiedCode={copiedCode}
+        onCopy={copyMachineCode}
+      />
+      <LicenseStatusCard
+        licenseInfo={licenseInfo}
+        totalRouteCount={routes.length}
+        activeRouteCount={routes.filter(r => r.active !== false).length}
+      />
+      <LicenseActivationCard
+        licenseKeyInput={licenseKeyInput}
+        setLicenseKeyInput={setLicenseKeyInput}
+        licenseMsg={licenseMsg}
+        setLicenseMsg={setLicenseMsg}
+        onActivate={handleActivateLicense}
+        machineCode={licenseInfo?.machine_code}
+      />
+    </div>
+  );
+
   const renderDashboard = () => {
     const totalReceived = Object.values(stats).reduce((acc, s) => acc + (s.received || 0), 0);
     const totalFiltered = Object.values(stats).reduce((acc, s) => acc + (s.filtered || 0), 0);
@@ -1161,6 +1581,7 @@ function App() {
     if (loading) return <p>Loading...</p>;
     if (activeTab === 'dashboard') return renderDashboard();
     if (activeTab === 'integrations') return renderIntegrations();
+    if (activeTab === 'license') return renderLicenseView();
     if (activeTab === 'users') return renderUsersView();
     if (activeTab === 'environments') return renderVariablesView();
     return renderLogsView();
@@ -1201,6 +1622,9 @@ function App() {
           <button className={activeTab === 'environments' ? 'active' : ''} onClick={() => { setActiveTab('environments'); void fetchVariables(); }}>
             <KeyRound size={16} /> Environments
           </button>
+          <button className={activeTab === 'license' ? 'active' : ''} onClick={() => { setActiveTab('license'); void fetchLicense(); }}>
+            <Award size={16} /> License & Mesin
+          </button>
           <button className={activeTab === 'users' ? 'active' : ''} onClick={() => { setActiveTab('users'); void fetchUsers(); }}>
             <UsersIcon size={16} /> Users
           </button>
@@ -1221,6 +1645,14 @@ function App() {
               </button>
               <button disabled={!selectedRouteId} onClick={() => selectedRouteId && toggleRoute(selectedRouteId)}>
                 {isSelectedActive() ? 'Disable Channel' : 'Enable Channel'}
+              </button>
+              <button
+                disabled={!selectedRouteId}
+                style={{ color: '#ef4444' }}
+                onClick={() => selectedRouteId && deleteRoute(selectedRouteId)}
+                title={licenseInfo?.is_trial ? 'Channel tidak dapat dihapus selama mode Trial' : 'Hapus Channel'}
+              >
+                Delete Channel
               </button>
             </nav>
 
@@ -1266,7 +1698,7 @@ function App() {
                   <Menu size={24} color="var(--primary)" />
                 </button>
                 <h1 className="page-title">
-                  {{ 'integrations': 'Channels', 'logs': 'Message Logs', 'users': 'Users', 'environments': 'Global Environments' }[activeTab] || 'Dashboard'}
+                  {{ 'integrations': 'Channels', 'logs': 'Message Logs', 'users': 'Users', 'environments': 'Global Environments', 'license': 'Manajemen Lisensi & Mesin' }[activeTab] || 'Dashboard'}
                 </h1>
               </div>
             </div>

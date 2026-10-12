@@ -167,6 +167,39 @@ Installer dibuat dengan **Inno Setup** dari [health-connect-installer.iss](healt
 4. Gunakan **Variables** untuk menyimpan kredensial, lalu referensikan dengan `{{NAMA_VARIABEL}}` (mis. `PWD={{DB_PASSWORD}}` pada DSN). Key yang mengandung `key/pass/secret/token/pwd/dsn` otomatis disembunyikan.
 5. Klik **Test Connection** untuk verifikasi, lalu **Save Channel**.
 
+## Fitur Lisensi Mesin (Windows, macOS, Linux)
+
+HealthConnect dilengkapi sistem lisensi terkunci pada identitas perangkat keras (*hardware-locked machine code*):
+
+### 1. Pembacaan Kode Mesin Lintas OS
+Kode mesin berformat `HC-XXXX-XXXX-XXXX-XXXX` dihasilkan secara deterministik:
+- **Windows**: Mengambil `MachineGuid` dari Registry `HKLM\SOFTWARE\Microsoft\Cryptography` atau UUID CSPRODUCT.
+- **macOS**: Mengambil UUID mesin hardware via `ioreg -d2 -c IOPlatformExpertDevice` (`IOPlatformUUID`).
+- **Linux**: Mengambil ID unik mesin dari `/etc/machine-id` atau `/var/lib/dbus/machine-id`.
+
+### 2. Penyimpanan Berkas Lisensi
+Saat lisensi diaktivasi, sistem otomatis menulis berkas `license.key` ke direktori sistem lokal:
+- **Windows**: `%ProgramData%\HealthConnect\license.key`
+- **macOS**: `~/Library/Application Support/HealthConnect/license.key`
+- **Linux**: `/etc/health-connect/license.key` atau `~/.config/health-connect/license.key`
+- Cadangan lokal juga disimpan di tabel database SQLite `app_license`.
+
+### 3. Generator Lisensi (CLI Admin)
+Untuk menerbitkan lisensi bagi faskes / rumah sakit:
+```powershell
+cd D:\middleware\backend-go\tools\license-gen
+go run main.go -machine "HC-A1B2-C3D4-E5F6-7890" -customer "RS Hermina" -days 365 -max-routes 10
+```
+
+Parameter yang didukung:
+- `-machine`: Kode mesin target (diambil dari menu **License & Mesin** di web UI)
+- `-customer`: Nama Rumah Sakit / Klien
+- `-days`: Masa aktif dalam hari (misal 365 untuk 1 tahun)
+- `-max-routes`: Kuota channel aktif (0 = tanpa batas)
+- `-out`: Lokasi penyimpanan file `license.key` (default: `license.key`)
+
+Hasil kunci lisensi ditandatangani secara kriptografis menggunakan algoritma RSA PKCS#1 v1.5 dengan SHA256 (asymmetric key pair, private key hanya dipegang administrator).
+
 ## Troubleshooting
 
 - **`pattern dist/*: no matching files found`** → jalankan `npm run build` di folder `frontend` terlebih dahulu.
