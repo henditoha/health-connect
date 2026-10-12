@@ -1,0 +1,16 @@
+Instalasi Selesai! 🎉
+
+Health Connect Middleware telah berhasil dipasang di komputer Anda.
+
+LANGKAH SELANJUTNYA:
+1. Buka aplikasi melalui Shortcut "Health Connect" yang ada di Desktop Anda.
+2. Aplikasi akan berjalan di latar belakang sebagai penyedia service integrasi.
+3. Untuk mengakses tampilan antarmuka (Dashboard UI), buka browser favorit Anda (Google Chrome / Microsoft Edge) dan kunjungi alamat berikut:
+   
+   👉 http://localhost:3001
+
+4. Jika Anda perlu mengubah port aplikasi karena bentrok dengan aplikasi lain, silakan buka folder instalasi dan edit angka port di dalam file `config.json`.
+
+Informasi lebih lanjut dapat menghubungi Ns. Hendi, S.Kep., MMSI 0816955775
+
+Terima kasih telah menggunakan Health Connect!

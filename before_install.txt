@@ -1,0 +1,10 @@
+Selamat datang di instalasi Health Connect Middleware!
+
+Health Connect adalah mesin integrasi pintar yang dirancang untuk menjembatani komunikasi data antar sistem kesehatan (seperti HIS, LIS, PACS, dan SATUSEHAT) dengan cepat dan aman.
+
+INFORMASI PENTING SEBELUM INSTALASI:
+1. Pastikan Port 3001 di komputer Anda tidak sedang digunakan oleh aplikasi lain. (Jika port tersebut sudah dipakai, Anda tetap bisa mengubahnya nanti melalui file config.json setelah instalasi).
+2. Aplikasi ini bersifat mandiri (standalone)
+3. Seluruh konfigurasi dan log transaksi akan disimpan secara aman secara lokal di komputer ini.
+
+Klik "Next" untuk melanjutkan proses instalasi ke sistem Anda.

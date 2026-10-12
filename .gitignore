@@ -1,0 +1,27 @@
+# Node & Frontend dependencies
+frontend/node_modules/
+node_modules/
+frontend/.vite/
+
+# Build artifacts & executables
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+backend-go/health-connect.exe
+
+# Database & local data
+*.db
+*.db-journal
+*.sqlite
+instance/
+backend-go/*.db
+backend/instance/
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
