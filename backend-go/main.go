@@ -22,7 +22,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const errInvalidRequest = "Invalid request"
+const (
+	errInvalidRequest       = "Invalid request"
+	maskedSecretPlaceholder = "********"
+)
 
 //go:embed dist/*
 var frontendFS embed.FS
@@ -366,36 +369,55 @@ func updateRoute(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "Updated"})
 }
 
+func findRouteByIDOrName(target string) (*Route, bool) {
+	if r, exists := engine.Routes[target]; exists {
+		return &r, true
+	}
+	targetSlug := strings.ToLower(strings.ReplaceAll(target, " ", "-"))
+	for _, r := range engine.Routes {
+		rSlug := strings.ToLower(strings.ReplaceAll(r.Name, " ", "-"))
+		if strings.EqualFold(r.ID, target) || strings.EqualFold(r.Name, target) || rSlug == targetSlug {
+			return &r, true
+		}
+	}
+	return nil, false
+}
+
+func getRouteAckBehavior(route Route) string {
+	source := engine.GetEndpoint(route, "source")
+	if source == nil {
+		return "deferred"
+	}
+	var cfg map[string]interface{}
+	if err := json.Unmarshal([]byte(source.Config), &cfg); err == nil {
+		if ab, ok := cfg["ackBehavior"].(string); ok && ab != "" {
+			return ab
+		}
+	}
+	return "deferred"
+}
+
 func handleIngress(c *gin.Context) {
 	routeId := c.Param("routeId")
 	body, _ := io.ReadAll(c.Request.Body)
-	
-	route, exists := engine.Routes[routeId]
+
+	route, exists := findRouteByIDOrName(routeId)
 	if !exists {
-		c.JSON(404, gin.H{"error": "Not found"})
+		c.JSON(404, gin.H{"error": "Channel endpoint not found"})
 		return
 	}
 
-	source := engine.GetEndpoint(route, "source")
-	ackBehavior := "deferred"
-	if source != nil {
-		var cfg map[string]interface{}
-		json.Unmarshal([]byte(source.Config), &cfg)
-		if ab, ok := cfg["ackBehavior"].(string); ok {
-			ackBehavior = ab
-		}
+	if getRouteAckBehavior(*route) == "immediate" {
+		c.String(200, "ACK")
+		engine.EnqueueMessage(route.ID, string(body))
+		return
 	}
 
-	if ackBehavior == "immediate" {
-		c.String(200, "ACK")
-		engine.EnqueueMessage(routeId, string(body))
+	success, resp, err := engine.ExecuteRoute(route.ID, string(body))
+	if success {
+		c.String(200, resp)
 	} else {
-		success, resp, err := engine.ExecuteRoute(routeId, string(body))
-		if success {
-			c.String(200, resp)
-		} else {
-			c.JSON(500, gin.H{"error": err.Error()})
-		}
+		c.JSON(500, gin.H{"error": err.Error()})
 	}
 }
 
@@ -944,7 +966,7 @@ func getVariables(c *gin.Context) {
 			v.Description = desc.String
 		}
 		if v.IsSecret {
-			v.ValueData = "********" // Mask secret on the frontend
+			v.ValueData = maskedSecretPlaceholder // Mask secret on the frontend
 		}
 		vars = append(vars, v)
 	}
@@ -966,15 +988,26 @@ func createVariable(c *gin.Context) {
 		return
 	}
 
+	valToSave := v.ValueData
+	if v.IsSecret {
+		encrypted, err := EncryptSecret(v.ValueData)
+		if err == nil {
+			valToSave = encrypted
+		}
+	}
+
 	v.ID = uuid.New().String()
-	_, err := db.Exec("INSERT INTO global_variables (id, key_name, value_data, is_secret, description) VALUES (?, ?, ?, ?, ?)",
-		v.ID, v.KeyName, v.ValueData, v.IsSecret, v.Description)
+	_, err := db.Exec(queryInsertGlobalVar,
+		v.ID, v.KeyName, valToSave, v.IsSecret, v.Description)
 	
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to create variable (maybe duplicate key?)"})
 		return
 	}
 	engine.loadGlobalVariables()
+	if v.IsSecret {
+		v.ValueData = maskedSecretPlaceholder
+	}
 	c.JSON(200, v)
 }
 
@@ -987,7 +1020,7 @@ func updateVariable(c *gin.Context) {
 	}
 
 	// If it's a secret and the frontend sent the masked value, don't update the value_data
-	if v.IsSecret && v.ValueData == "********" {
+	if v.IsSecret && v.ValueData == maskedSecretPlaceholder {
 		_, err := db.Exec("UPDATE global_variables SET key_name=?, is_secret=?, description=? WHERE id=?",
 			v.KeyName, v.IsSecret, v.Description, id)
 		if err != nil {
@@ -995,8 +1028,15 @@ func updateVariable(c *gin.Context) {
 			return
 		}
 	} else {
+		valToSave := v.ValueData
+		if v.IsSecret {
+			encrypted, err := EncryptSecret(v.ValueData)
+			if err == nil {
+				valToSave = encrypted
+			}
+		}
 		_, err := db.Exec("UPDATE global_variables SET key_name=?, value_data=?, is_secret=?, description=? WHERE id=?",
-			v.KeyName, v.ValueData, v.IsSecret, v.Description, id)
+			v.KeyName, valToSave, v.IsSecret, v.Description, id)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return

@@ -363,8 +363,277 @@ function LicenseActivationCard({ licenseKeyInput, setLicenseKeyInput, licenseMsg
   );
 }
 
+function VariableEditModal({ modal, onClose, onSave }) {
+  const [form, setForm] = useState({ ...modal });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!form.key_name?.trim()) {
+      alert("Key name cannot be empty");
+      return;
+    }
+    onSave(form);
+  };
+
+  const handleLoadTemplate = () => {
+    const sampleTemplate = JSON.stringify({
+      "RS01": {
+        "name": "RS Medika Contoh 1",
+        "satusehat": {
+          "org_id": "10000001",
+          "client_id": "YOUR_CLIENT_ID_RS01",
+          "client_secret": "YOUR_CLIENT_SECRET_RS01"
+        }
+      },
+      "RS02": {
+        "name": "RS Sehat Contoh 2",
+        "satusehat": {
+          "org_id": "10000002",
+          "client_id": "YOUR_CLIENT_ID_RS02",
+          "client_secret": "YOUR_CLIENT_SECRET_RS02"
+        }
+      }
+    }, null, 2);
+    setForm(prev => ({ ...prev, value_data: sampleTemplate, is_secret: true }));
+  };
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(15, 23, 42, 0.65)',
+      backdropFilter: 'blur(3px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 9999,
+      padding: '1rem'
+    }}>
+      <form onSubmit={handleSubmit} style={{
+        backgroundColor: 'var(--bg-card)',
+        borderRadius: '12px',
+        border: '1px solid var(--border)',
+        width: '100%',
+        maxWidth: '680px',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        maxHeight: '90vh'
+      }}>
+        <div style={{
+          padding: '1.25rem 1.5rem',
+          borderBottom: '1px solid var(--border)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          backgroundColor: 'var(--bg-subtle)'
+        }}>
+          <h3 style={{ margin: 0, color: 'var(--primary)', fontSize: '1.1rem', fontWeight: 700 }}>
+            {form.mode === 'create' ? '➕ Create Global Variable' : `✏️ Edit Variable: ${form.key_name}`}
+          </h3>
+          <button
+            type="button"
+            className="btn"
+            style={{ padding: '0.2rem 0.5rem', fontSize: '1rem', lineHeight: 1 }}
+            onClick={onClose}
+          >
+            ✕
+          </button>
+        </div>
+
+        <div style={{ padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div>
+            <label htmlFor="modalKeyName" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>
+              Variable Key Name
+            </label>
+            <input
+              id="modalKeyName"
+              className="form-control"
+              style={{ fontFamily: 'monospace', fontWeight: 600, color: '#4338ca' }}
+              placeholder="e.g. TENANT_CREDENTIALS, SATUSEHAT_BASE_URL"
+              value={form.key_name}
+              disabled={form.mode === 'edit'}
+              onChange={e => setForm({ ...form, key_name: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="modalDescription" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>
+              Description
+            </label>
+            <input
+              id="modalDescription"
+              className="form-control"
+              placeholder="Brief description of this variable..."
+              value={form.description}
+              onChange={e => setForm({ ...form, description: e.target.value })}
+            />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <input
+              type="checkbox"
+              id="modalIsSecret"
+              checked={form.is_secret}
+              onChange={e => setForm({ ...form, is_secret: e.target.checked })}
+              style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+            />
+            <label htmlFor="modalIsSecret" style={{ fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer' }}>
+              🔒 Secret Variable (Terenkripsi AES-256-GCM di server & dimask di UI)
+            </label>
+          </div>
+
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+              <label htmlFor="modalValueData" style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                Value Data (Plain text / Multi-line JSON)
+              </label>
+              {(form.key_name?.includes('TENANT') || form.key_name?.includes('CREDENTIAL')) && (
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', color: 'var(--primary)', borderColor: 'var(--primary)' }}
+                  onClick={handleLoadTemplate}
+                >
+                  📋 Load Multi-RS JSON Template
+                </button>
+              )}
+            </div>
+            <textarea
+              id="modalValueData"
+              className="form-control"
+              rows={9}
+              style={{
+                fontFamily: 'Consolas, Monaco, monospace',
+                fontSize: '12px',
+                lineHeight: 1.5,
+                whiteSpace: 'pre',
+                backgroundColor: '#0d1117',
+                color: '#58a6ff'
+              }}
+              placeholder={form.is_secret && form.mode === 'edit'
+                ? 'Biarkan kosong untuk mempertahankan secret saat ini, atau paste nilai/JSON baru...'
+                : 'Ketik nilai variabel atau JSON multi-line di sini...'}
+              value={form.value_data}
+              onChange={e => setForm({ ...form, value_data: e.target.value })}
+            />
+            {form.is_secret && form.mode === 'edit' && (
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+                ℹ️ Nilai rahasia saat ini aman & terenkripsi di server. Kosongkan kotak di atas jika tidak ingin mengubah secret lama.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{
+          padding: '1rem 1.5rem',
+          borderTop: '1px solid var(--border)',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: '0.75rem',
+          backgroundColor: 'var(--bg-card)'
+        }}>
+          <button type="button" className="btn" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn btn-primary">Save Variable</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function SidebarActions({
+  editingRoute,
+  activeTab,
+  isDirty,
+  saveRoute,
+  handleCloseEditor,
+  selectedRouteId,
+  cloneRoute,
+  openEdit,
+  toggleRoute,
+  isSelectedActive,
+  deleteRoute,
+  licenseInfo,
+  createRoute,
+  createGroup,
+  routes
+}) {
+  if (editingRoute) {
+    return (
+      <>
+        <div className="sidebar-section">Active Channel</div>
+        <nav className="sidebar-menu">
+          <div style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+            <span style={{ fontWeight: 600, color: 'var(--primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={editingRoute.name}>
+              ✏️ {editingRoute.name || 'Untitled'}
+            </span>
+            {isDirty && (
+              <span style={{ fontSize: '0.65rem', color: '#D97706', backgroundColor: 'rgba(217, 119, 6, 0.1)', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 700, flexShrink: 0 }}>
+                MODIFIED
+              </span>
+            )}
+          </div>
+          <button onClick={saveRoute} style={{ color: 'var(--primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <Save size={15} /> Save Channel
+          </button>
+          <button onClick={handleCloseEditor} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <ArrowLeft size={15} /> Back to Channels
+          </button>
+        </nav>
+      </>
+    );
+  }
+
+  if (activeTab === 'integrations') {
+    return (
+      <>
+        <div className="sidebar-section">Channel Tasks</div>
+        <nav className="sidebar-menu">
+          <button onClick={createRoute}>New Channel</button>
+          <button disabled={!selectedRouteId} onClick={() => selectedRouteId && cloneRoute(selectedRouteId)}>
+            Clone Channel
+          </button>
+          <button disabled={!selectedRouteId} onClick={() => {
+            if (selectedRouteId) openEdit(routes.find(r => r.id === selectedRouteId));
+          }}>
+            Edit Channel
+          </button>
+          <button disabled={!selectedRouteId} onClick={() => selectedRouteId && toggleRoute(selectedRouteId)}>
+            {isSelectedActive ? 'Disable Channel' : 'Enable Channel'}
+          </button>
+          <button
+            disabled={!selectedRouteId}
+            style={{ color: '#ef4444' }}
+            onClick={() => selectedRouteId && deleteRoute(selectedRouteId)}
+            title={licenseInfo?.is_trial ? 'Channels cannot be deleted during Trial mode' : 'Delete Channel'}
+          >
+            Delete Channel
+          </button>
+        </nav>
+
+        <div className="sidebar-section">Group Tasks</div>
+        <nav className="sidebar-menu">
+          <button onClick={createGroup}>New Group</button>
+          <button disabled={!selectedRouteId} onClick={() => {
+            if (selectedRouteId) openEdit(routes.find(r => r.id === selectedRouteId));
+          }}>
+            Assign To Group
+          </button>
+        </nav>
+      </>
+    );
+  }
+
+  return null;
+}
+
 function App() {
   const [routes, setRoutes] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [logs, setLogs] = useState([]);
   const [activeTab, setActiveTab] = useState('integrations');
   const [selectedChannel, setSelectedChannel] = useState('');
@@ -373,8 +642,8 @@ function App() {
   const [editingRoute, setEditingRoute] = useState(null);
   const [selectedRouteId, setSelectedRouteId] = useState(null);
   const [collapsedGroups, setCollapsedGroups] = useState({});
-  const [groups, setGroups] = useState([]);
   const [variables, setVariables] = useState([]);
+  const [editingVarModal, setEditingVarModal] = useState(null);
   const [logSearch, setLogSearch] = useState('');
   const [logStartDate, setLogStartDate] = useState('');
   const [logEndDate, setLogEndDate] = useState('');
@@ -1344,44 +1613,47 @@ function App() {
     );
   }
 
-  const handleAddVariable = async () => {
-    const keyName = prompt("Enter Variable Key (e.g. SATUSEHAT_CLIENT_ID):");
-    if (!keyName) return;
-    const valueData = prompt(`Enter Value for ${keyName}:`);
-    if (valueData === null) return; // allows empty string
-    const isSecret = confirm("Is this a secret? (Value will be hidden in UI)");
-    const description = prompt("Enter description (optional):") || '';
-
-    try {
-      await fetch(`${API_BASE}/variables`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key_name: keyName, value_data: valueData, is_secret: isSecret, description })
-      });
-      void fetchVariables();
-    } catch (e) {
-      console.error(e);
-    }
+  const handleAddVariable = () => {
+    setEditingVarModal({
+      mode: 'create',
+      key_name: '',
+      value_data: '',
+      is_secret: false,
+      description: ''
+    });
   };
 
-  const handleEditVariable = async (v) => {
-    const newValue = prompt(`Enter new value for ${v.key_name} (leave empty to keep current if secret):`, v.is_secret ? '' : v.value_data);
-    if (newValue === null) return;
-    
+  const handleEditVariable = (v) => {
+    setEditingVarModal({
+      mode: 'edit',
+      id: v.id,
+      key_name: v.key_name,
+      value_data: v.is_secret ? '' : v.value_data,
+      is_secret: v.is_secret,
+      description: v.description || ''
+    });
+  };
+
+  const handleSaveVarModal = async (form) => {
+    const { mode, id, key_name, value_data, is_secret, description } = form;
     try {
-      await fetch(`${API_BASE}/variables/${v.id}`, {
-        method: 'PUT',
+      const url = mode === 'create' ? `${API_BASE}/variables` : `${API_BASE}/variables/${id}`;
+      const method = mode === 'create' ? 'POST' : 'PUT';
+      const body = {
+        key_name: key_name.trim(),
+        value_data: value_data || (mode === 'create' ? '' : '********'),
+        is_secret,
+        description
+      };
+      await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          key_name: v.key_name, 
-          value_data: newValue || v.value_data, 
-          is_secret: v.is_secret, 
-          description: v.description 
-        })
+        body: JSON.stringify(body)
       });
+      setEditingVarModal(null);
       void fetchVariables();
     } catch (e) {
-      console.error(e);
+      alert("Failed to save variable: " + (e.message || e));
     }
   };
 
@@ -1435,6 +1707,14 @@ function App() {
           </tbody>
         </table>
       </div>
+
+      {editingVarModal && (
+        <VariableEditModal
+          modal={editingVarModal}
+          onClose={() => setEditingVarModal(null)}
+          onSave={handleSaveVarModal}
+        />
+      )}
     </div>
   );
 
@@ -1635,7 +1915,7 @@ function App() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1rem 0' }}>
-              <svg width="150" height="150" viewBox="0 0 42 42" style={{ transform: 'rotate(-90deg)' }}>
+              <svg width="150" height="150" viewBox="0 0 42 42" role="img" aria-label="Execution Status Ratio Donut Chart" style={{ transform: 'rotate(-90deg)' }}>
                 <circle cx="21" cy="21" r="15.915" fill="transparent" stroke="var(--bg-subtle)" strokeWidth="4.5" />
                 {/* Sent (Green) */}
                 <circle
@@ -1750,65 +2030,23 @@ function App() {
           </button>
         </nav>
 
-        {editingRoute ? (
-          <>
-            <div className="sidebar-section">Active Channel</div>
-            <nav className="sidebar-menu">
-              <div style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-                <span style={{ fontWeight: 600, color: 'var(--primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={editingRoute.name}>
-                  ✏️ {editingRoute.name || 'Untitled'}
-                </span>
-                {isRouteDirty() && (
-                  <span style={{ fontSize: '0.65rem', color: '#D97706', backgroundColor: 'rgba(217, 119, 6, 0.1)', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 700, flexShrink: 0 }}>
-                    MODIFIED
-                  </span>
-                )}
-              </div>
-              <button onClick={saveRoute} style={{ color: 'var(--primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <Save size={15} /> Save Channel
-              </button>
-              <button onClick={handleCloseEditor} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <ArrowLeft size={15} /> Back to Channels
-              </button>
-            </nav>
-          </>
-        ) : activeTab === 'integrations' ? (
-          <>
-            <div className="sidebar-section">Channel Tasks</div>
-            <nav className="sidebar-menu">
-              <button onClick={createRoute}>New Channel</button>
-              <button disabled={!selectedRouteId} onClick={() => selectedRouteId && cloneRoute(selectedRouteId)}>
-                Clone Channel
-              </button>
-              <button disabled={!selectedRouteId} onClick={() => {
-                if (selectedRouteId) openEdit(routes.find(r => r.id === selectedRouteId));
-              }}>
-                Edit Channel
-              </button>
-              <button disabled={!selectedRouteId} onClick={() => selectedRouteId && toggleRoute(selectedRouteId)}>
-                {isSelectedActive() ? 'Disable Channel' : 'Enable Channel'}
-              </button>
-              <button
-                disabled={!selectedRouteId}
-                style={{ color: '#ef4444' }}
-                onClick={() => selectedRouteId && deleteRoute(selectedRouteId)}
-                title={licenseInfo?.is_trial ? 'Channels cannot be deleted during Trial mode' : 'Delete Channel'}
-              >
-                Delete Channel
-              </button>
-            </nav>
-
-            <div className="sidebar-section">Group Tasks</div>
-            <nav className="sidebar-menu">
-              <button onClick={createGroup}>New Group</button>
-              <button disabled={!selectedRouteId} onClick={() => {
-                if (selectedRouteId) openEdit(routes.find(r => r.id === selectedRouteId));
-              }}>
-                Assign To Group
-              </button>
-            </nav>
-          </>
-        ) : null}
+        <SidebarActions
+          editingRoute={editingRoute}
+          activeTab={activeTab}
+          isDirty={isRouteDirty()}
+          saveRoute={saveRoute}
+          handleCloseEditor={handleCloseEditor}
+          selectedRouteId={selectedRouteId}
+          cloneRoute={cloneRoute}
+          openEdit={openEdit}
+          toggleRoute={toggleRoute}
+          isSelectedActive={isSelectedActive()}
+          deleteRoute={deleteRoute}
+          licenseInfo={licenseInfo}
+          createRoute={createRoute}
+          createGroup={createGroup}
+          routes={routes}
+        />
 
         <div className="sidebar-section">Other</div>
         <nav className="sidebar-menu" style={{ marginTop: 'auto', marginBottom: '1rem' }}>

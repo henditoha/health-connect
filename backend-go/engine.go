@@ -98,7 +98,7 @@ func (e *IntegrationEngine) startTCPIfActive(r Route) {
 }
 
 func (e *IntegrationEngine) loadGlobalVariables() {
-	rows, err := db.Query("SELECT key_name, value_data FROM global_variables")
+	rows, err := db.Query("SELECT key_name, value_data, is_secret FROM global_variables")
 	if err != nil {
 		log.Println("Error loading global variables:", err)
 		return
@@ -108,7 +108,20 @@ func (e *IntegrationEngine) loadGlobalVariables() {
 	e.GlobalVars = make(map[string]string)
 	for rows.Next() {
 		var k, v string
-		if err := rows.Scan(&k, &v); err == nil {
+		var isSec sql.NullInt64
+		if err := rows.Scan(&k, &v, &isSec); err == nil {
+			if isSec.Valid && isSec.Int64 == 1 {
+				// Encrypt in DB if stored unencrypted (transparent migration)
+				if !strings.HasPrefix(v, secretPrefix) && v != "" {
+					if enc, err := EncryptSecret(v); err == nil {
+						db.Exec("UPDATE global_variables SET value_data = ? WHERE key_name = ?", enc, k)
+					}
+				} else {
+					if decrypted, err := DecryptSecret(v); err == nil {
+						v = decrypted
+					}
+				}
+			}
 			e.GlobalVars[k] = v
 		}
 	}
@@ -164,7 +177,7 @@ func loadTransformerForRoute(r *Route) {
 	trRows.Close()
 }
 
-func runTransformerScript(script, inputData, inTpl, outTpl string) (string, error) {
+func (e *IntegrationEngine) runTransformerScript(script, inputData, inTpl, outTpl string, route Route) (string, error) {
 	if script == "" {
 		return inputData, nil
 	}
@@ -172,6 +185,77 @@ func runTransformerScript(script, inputData, inTpl, outTpl string) (string, erro
 	vm.Set("input", inputData)
 	vm.Set("inboundTemplate", inTpl)
 	vm.Set("outboundTemplate", outTpl)
+
+	// In-memory thread-safe cache
+	cacheObj := vm.NewObject()
+	cacheObj.Set("get", func(key string) goja.Value {
+		if val, ok := globalCache.Get(key); ok {
+			return vm.ToValue(val)
+		}
+		return goja.Null()
+	})
+	cacheObj.Set("set", func(key string, val string, ttlSec int) bool {
+		globalCache.Set(key, val, ttlSec)
+		return true
+	})
+	cacheObj.Set("delete", func(key string) bool {
+		globalCache.Delete(key)
+		return true
+	})
+	vm.Set("cache", cacheObj)
+
+	// Global & Scoped Variables access
+	vm.Set("getGlobalVar", func(key string) string {
+		return e.GlobalVars[key]
+	})
+	vm.Set("getRouteVar", func(key string) string {
+		return route.Variables[key]
+	})
+
+	// Full HTTP Client in Script
+	httpObj := vm.NewObject()
+	httpObj.Set("request", func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) == 0 {
+			panic(vm.ToValue("http.request requires options object"))
+		}
+		optsVal := call.Arguments[0].Export()
+		opts, ok := optsVal.(map[string]interface{})
+		if !ok {
+			panic(vm.ToValue("http.request options must be an object"))
+		}
+		res, err := executeScriptHTTPRequest(opts)
+		if err != nil {
+			panic(vm.ToValue("http.request error: " + err.Error()))
+		}
+		return vm.ToValue(res)
+	})
+	httpObj.Set("get", func(urlStr string) goja.Value {
+		res, err := executeScriptHTTPRequest(map[string]interface{}{
+			"url":    urlStr,
+			"method": "GET",
+		})
+		if err != nil {
+			panic(vm.ToValue("http.get error: " + err.Error()))
+		}
+		return vm.ToValue(res)
+	})
+	httpObj.Set("post", func(urlStr string, body string, contentType string) goja.Value {
+		headers := map[string]interface{}{}
+		if contentType != "" {
+			headers["Content-Type"] = contentType
+		}
+		res, err := executeScriptHTTPRequest(map[string]interface{}{
+			"url":     urlStr,
+			"method":  "POST",
+			"headers": headers,
+			"body":    body,
+		})
+		if err != nil {
+			panic(vm.ToValue("http.post error: " + err.Error()))
+		}
+		return vm.ToValue(res)
+	})
+	vm.Set("http", httpObj)
 
 	vm.Set("fetch", func(urlStr string) string {
 		res, err := httpFetchHelper(urlStr)
@@ -195,6 +279,79 @@ func runTransformerScript(script, inputData, inTpl, outTpl string) (string, erro
 		return "", err
 	}
 	return val.String(), nil
+}
+
+func executeScriptHTTPRequest(opts map[string]interface{}) (map[string]interface{}, error) {
+	urlStr, _ := opts["url"].(string)
+	if urlStr == "" {
+		return nil, errors.New("url is required")
+	}
+
+	method, _ := opts["method"].(string)
+	if method == "" {
+		method = "GET"
+	}
+	method = strings.ToUpper(strings.TrimSpace(method))
+
+	var bodyReader io.Reader
+	if bodyVal, exists := opts["body"]; exists && bodyVal != nil {
+		switch b := bodyVal.(type) {
+		case string:
+			bodyReader = strings.NewReader(b)
+		case []byte:
+			bodyReader = bytes.NewReader(b)
+		default:
+			jsonBytes, err := json.Marshal(b)
+			if err != nil {
+				return nil, fmt.Errorf("failed to serialize body: %w", err)
+			}
+			bodyReader = bytes.NewReader(jsonBytes)
+		}
+	}
+
+	req, err := http.NewRequest(method, urlStr, bodyReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if headersRaw, ok := opts["headers"].(map[string]interface{}); ok {
+		for hk, hv := range headersRaw {
+			req.Header.Set(hk, fmt.Sprint(hv))
+		}
+	}
+
+	timeoutSec := 15
+	if t, ok := opts["timeout"].(float64); ok && t > 0 {
+		timeoutSec = int(t)
+	} else if t, ok := opts["timeout"].(int); ok && t > 0 {
+		timeoutSec = t
+	}
+
+	client := &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	respHeaders := make(map[string]string)
+	for hk, hv := range resp.Header {
+		if len(hv) > 0 {
+			respHeaders[hk] = hv[0]
+		}
+	}
+
+	return map[string]interface{}{
+		"status":     resp.StatusCode,
+		"statusText": resp.Status,
+		"headers":    respHeaders,
+		"body":       string(respBytes),
+	}, nil
 }
 
 func httpFetchHelper(urlStr string) (string, error) {
@@ -444,7 +601,7 @@ func (e *IntegrationEngine) ExecuteRoute(routeID string, inputData string) (bool
 		id := uuid.New().String()
 		_, err := db.Exec(`INSERT INTO message_logs (id, route_id, source_protocol, target_protocol, inbound_data, outbound_data, response_data, status, error_message, created_at) 
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			id, routeID, sourceProto, targetProto, inputData, transformedData, targetResponse, status, errorMsg, time.Now().Format(time.RFC3339))
+			id, routeID, sourceProto, targetProto, SanitizeLogText(inputData), SanitizeLogText(transformedData), SanitizeLogText(targetResponse), status, SanitizeLogText(errorMsg), time.Now().Format(time.RFC3339))
 		if err != nil {
 			log.Println("DB Log error:", err)
 		}
@@ -465,7 +622,7 @@ func (e *IntegrationEngine) ExecuteRoute(routeID string, inputData string) (bool
 	}
 
 	// 2. Source Inbound Transformer
-	transformedData, err = runSourceTransformer(source, route, inputData)
+	transformedData, err = e.runSourceTransformer(source, route, inputData)
 	if err != nil {
 		status = "ERROR"
 		errorMsg = "Source Transformer Error: " + err.Error()
@@ -525,7 +682,7 @@ func checkSourceFilter(source *Endpoint, inputData string) (bool, error) {
 	return evalFilterScript(filterScript, inputData)
 }
 
-func runSourceTransformer(source *Endpoint, route Route, inputData string) (string, error) {
+func (e *IntegrationEngine) runSourceTransformer(source *Endpoint, route Route, inputData string) (string, error) {
 	sourceScript := route.Transformer.SourceScript
 	if source != nil {
 		var srcCfg map[string]interface{}
@@ -537,7 +694,7 @@ func runSourceTransformer(source *Endpoint, route Route, inputData string) (stri
 	if strings.TrimSpace(sourceScript) == "" {
 		return inputData, nil
 	}
-	return runTransformerScript(sourceScript, inputData, route.Transformer.InboundTemplate, route.Transformer.OutboundTemplate)
+	return e.runTransformerScript(sourceScript, inputData, route.Transformer.InboundTemplate, route.Transformer.OutboundTemplate, route)
 }
 
 func (e *IntegrationEngine) dispatchAllTargets(targets []Endpoint, transformedData string, route Route) ([]string, []string, int) {
@@ -585,7 +742,7 @@ func (e *IntegrationEngine) processDestination(tgt Endpoint, idx int, transforme
 		}
 	}
 
-	destPayload, err := applyDestinationTransformer(targetCfg, transformedData, route)
+	destPayload, err := e.applyDestinationTransformer(targetCfg, transformedData, route)
 	if err != nil {
 		return destName, "", fmt.Errorf("[%s] Transformer error: %w", destName, err), false
 	}
@@ -597,7 +754,7 @@ func (e *IntegrationEngine) processDestination(tgt Endpoint, idx int, transforme
 	return destName, resp, nil, false
 }
 
-func applyDestinationTransformer(targetCfg map[string]interface{}, transformedData string, route Route) (string, error) {
+func (e *IntegrationEngine) applyDestinationTransformer(targetCfg map[string]interface{}, transformedData string, route Route) (string, error) {
 	destScript := route.Transformer.Script
 	if s, ok := targetCfg["transformer_script"].(string); ok && strings.TrimSpace(s) != "" {
 		destScript = s
@@ -610,7 +767,7 @@ func applyDestinationTransformer(targetCfg map[string]interface{}, transformedDa
 	if strings.TrimSpace(destScript) == "" {
 		return transformedData, nil
 	}
-	return runTransformerScript(destScript, transformedData, route.Transformer.InboundTemplate, destOutTemplate)
+	return e.runTransformerScript(destScript, transformedData, route.Transformer.InboundTemplate, destOutTemplate, route)
 }
 
 func (e *IntegrationEngine) dispatchTargetProtocol(tgt Endpoint, targetCfg map[string]interface{}, destPayload string, route Route) (string, error) {
@@ -650,22 +807,78 @@ func (e *IntegrationEngine) dispatchHTTP(targetCfg map[string]interface{}, paylo
 	url = e.interpolateVariables(url, route)
 	payload = e.interpolateVariables(payload, route)
 
-	req, _ := http.NewRequest("POST", url, bytes.NewBuffer([]byte(payload)))
-	req.Header.Set("Content-Type", "application/json")
+	// Check for dynamic dispatch envelope in payload
+	var dynamicEnv struct {
+		Dispatch *struct {
+			URL     string            `json:"url"`
+			Method  string            `json:"method"`
+			Headers map[string]string `json:"headers"`
+		} `json:"__dispatch"`
+		Payload interface{} `json:"payload"`
+	}
+
+	method := "POST"
+	headers := make(map[string]string)
+	actualBody := payload
+
+	trimmedPayload := strings.TrimSpace(payload)
+	if strings.HasPrefix(trimmedPayload, "{") && strings.Contains(trimmedPayload, "__dispatch") {
+		if err := json.Unmarshal([]byte(trimmedPayload), &dynamicEnv); err == nil && dynamicEnv.Dispatch != nil && dynamicEnv.Dispatch.URL != "" {
+			url = dynamicEnv.Dispatch.URL
+			if dynamicEnv.Dispatch.Method != "" {
+				method = strings.ToUpper(strings.TrimSpace(dynamicEnv.Dispatch.Method))
+			}
+			for hk, hv := range dynamicEnv.Dispatch.Headers {
+				headers[hk] = hv
+			}
+			if dynamicEnv.Payload != nil {
+				switch p := dynamicEnv.Payload.(type) {
+				case string:
+					actualBody = p
+				default:
+					b, _ := json.Marshal(p)
+					actualBody = string(b)
+				}
+			} else {
+				actualBody = ""
+			}
+		}
+	}
+
+	url = e.interpolateVariables(url, route)
+	actualBody = e.interpolateVariables(actualBody, route)
+
+	req, err := http.NewRequest(method, url, bytes.NewBuffer([]byte(actualBody)))
+	if err != nil {
+		return "", fmt.Errorf("failed to create http request: %w", err)
+	}
+
+	// Apply default Content-Type if not in dynamic headers
+	if _, hasCT := headers["Content-Type"]; !hasCT {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	// Dynamic headers
+	for hk, hv := range headers {
+		req.Header.Set(hk, e.interpolateVariables(hv, route))
+	}
 	
-	if authType, ok := targetCfg["authType"].(string); ok {
-		switch authType {
-		case "basic":
-			user, _ := targetCfg["username"].(string)
-			pass, _ := targetCfg["password"].(string)
-			req.SetBasicAuth(e.interpolateVariables(user, route), e.interpolateVariables(pass, route))
-		case "bearer":
-			token, _ := targetCfg["token"].(string)
-			req.Header.Set("Authorization", "Bearer "+e.interpolateVariables(token, route))
+	// If no dynamic Authorization was provided, fallback to static auth config
+	if req.Header.Get("Authorization") == "" {
+		if authType, ok := targetCfg["authType"].(string); ok {
+			switch authType {
+			case "basic":
+				user, _ := targetCfg["username"].(string)
+				pass, _ := targetCfg["password"].(string)
+				req.SetBasicAuth(e.interpolateVariables(user, route), e.interpolateVariables(pass, route))
+			case "bearer":
+				token, _ := targetCfg["token"].(string)
+				req.Header.Set("Authorization", "Bearer "+e.interpolateVariables(token, route))
+			}
 		}
 	}
 	
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err

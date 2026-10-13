@@ -508,7 +508,7 @@ export default function ChannelEditor({
               🔄 Source Inbound Transformer & Data Enrichment
             </h3>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-              Pre-process, normalize, or enrich incoming data. Available functions: <code>fetch("url")</code> and <code>dbQuery("driver", "dsn", "query")</code>.
+              Pre-process, normalize, or enrich incoming data. Available functions: <code>http.request()</code>, <code>cache.get/set()</code>, <code>getGlobalVar("KEY")</code>, and <code>dbQuery()</code>.
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
               <div className="form-group" style={{ margin: 0 }}>
@@ -530,7 +530,7 @@ export default function ChannelEditor({
                 </label>
                 <textarea id="source-transformer-script" className="form-control editor-textarea"
                   style={{ fontSize: '12px', minHeight: '260px', borderLeft: '2px solid #818CF8' }}
-                  placeholder="// Optional: Pre-process or parse raw incoming data before routing to destinations&#10;var data = JSON.parse(input);&#10;return JSON.stringify(data);"
+                  placeholder="// Optional: Pre-process or normalize raw incoming data before routing&#10;var data = JSON.parse(input);&#10;return JSON.stringify(data);"
                   value={editingRoute.source.config?.transformer_script || ''}
                   onChange={e => updateSourceConfig({ transformer_script: e.target.value })}
                 />
@@ -783,17 +783,17 @@ export default function ChannelEditor({
               🔄 Destination Transformer & Mapping
             </h3>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-              Transform data specifically for this destination format. Available functions: <code>fetch("url")</code> and <code>dbQuery("driver", "dsn", "query")</code>.
+              Transform data for this destination. Available functions: <code>http.request()</code>, <code>cache.get/set()</code>, <code>getGlobalVar("KEY")</code>, and dynamic routing via <code>__dispatch</code>.
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
               <div className="form-group" style={{ margin: 0 }}>
                 <label htmlFor={`dest-trans-script-${activeDestIdx}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>Transformer Script (JavaScript)</span>
-                  <span style={{ fontSize: '10px', color: '#818CF8' }}>Mapping Logic</span>
+                  <span style={{ fontSize: '10px', color: '#818CF8' }}>Mapping & Dynamic Dispatch</span>
                 </label>
                 <textarea id={`dest-trans-script-${activeDestIdx}`} className="form-control editor-textarea"
                   style={{ fontSize: '12px', minHeight: '280px', borderLeft: '2px solid #818CF8' }}
-                  placeholder="// JavaScript code to format outbound payload for this destination&#10;var data = JSON.parse(input);&#10;return JSON.stringify(data);"
+                  placeholder="// Format payload, or return dynamic dispatch metadata:&#10;// return JSON.stringify({&#10;//   __dispatch: { url: targetUrl, method: 'POST', headers: { Authorization: 'Bearer ' + token } },&#10;//   payload: finalData&#10;// });"
                   value={activeDest.config?.transformer_script || ''}
                   onChange={e => updateActiveDestConfig({ transformer_script: e.target.value })}
                 />
