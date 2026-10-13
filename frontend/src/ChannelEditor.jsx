@@ -530,7 +530,7 @@ export default function ChannelEditor({
         </div>
       )}
 
-      {/* ==================== DESTINATIONS TAB (MULTI-DESTINASI) ==================== */}
+      {/* ==================== DESTINATIONS TAB (MULTI-DESTINATION) ==================== */}
       {editingRoute.channelTab === 'destinations' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           {/* Destination Selection Bar */}

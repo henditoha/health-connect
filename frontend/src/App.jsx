@@ -53,18 +53,18 @@ function getLicenseBadge(licenseInfo) {
   const isExpired = licenseInfo?.status_text === 'TRIAL_EXPIRED' || licenseInfo?.status_text === 'EXPIRED';
 
   if (isTrial && isExpired) {
-    return { color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)', text: '✕ Masa Trial Telah Berakhir' };
+    return { color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)', text: '✕ Trial Period Expired' };
   }
   if (isTrial) {
-    return { color: '#D97706', bg: 'rgba(217, 119, 6, 0.12)', text: '⏱ Mode Trial (Uji Coba)' };
+    return { color: '#D97706', bg: 'rgba(217, 119, 6, 0.12)', text: '⏱ Trial Mode (Evaluation)' };
   }
   if (isExpired) {
-    return { color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)', text: '✕ Lisensi Kadaluarsa' };
+    return { color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)', text: '✕ License Expired' };
   }
   if (!isValid) {
-    return { color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)', text: '✕ Belum Terlisensi' };
+    return { color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)', text: '✕ Unlicensed' };
   }
-  return { color: '#10B981', bg: 'rgba(16, 185, 129, 0.12)', text: '✓ Lisensi Resmi Aktif' };
+  return { color: '#10B981', bg: 'rgba(16, 185, 129, 0.12)', text: '✓ Official License Active' };
 }
 
 function getDaysLeftColor(daysLeft, isTrial) {
@@ -85,10 +85,10 @@ function LicenseMachineCard({ machineCode, copiedCode, onCopy }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div>
           <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Award size={20} color="var(--primary)" /> ID Mesin Laptop / Server
+            <Award size={20} color="var(--primary)" /> Laptop / Server Machine ID
           </h3>
           <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Hardware ID unik mesin yang terkunci pada perangkat fisik Anda (Windows, macOS, atau Linux).
+            Unique hardware ID locked to your physical device (Windows, macOS, or Linux).
           </p>
         </div>
         <span style={{
@@ -121,7 +121,7 @@ function LicenseMachineCard({ machineCode, copiedCode, onCopy }) {
           color: 'var(--primary)',
           flex: 1
         }}>
-          {machineCode || 'Membaca ID mesin...'}
+          {machineCode || 'Reading machine ID...'}
         </code>
         <button
           className="btn btn-primary"
@@ -129,11 +129,11 @@ function LicenseMachineCard({ machineCode, copiedCode, onCopy }) {
           style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem' }}
         >
           {copiedCode ? <Check size={16} /> : <Copy size={16} />}
-          {copiedCode ? 'Tersalin!' : 'Salin ID Mesin'}
+          {copiedCode ? 'Copied!' : 'Copy Machine ID'}
         </button>
       </div>
       <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-        💡 Salin <b>ID Mesin</b> di atas dan gunakan pada generator lisensi untuk membuat kunci lisensi resmi Rumah Sakit / Klien Anda.
+        💡 Copy the <b>Machine ID</b> above and use it in the license generator to issue an official license key for your Hospital / Client.
       </div>
     </div>
   );
@@ -149,12 +149,25 @@ function LicenseStatusCard({ licenseInfo, totalRouteCount, activeRouteCount }) {
   const daysLeftColor = getDaysLeftColor(licenseInfo?.days_left ?? 0, isTrial);
 
   const formattedExpiry = licenseInfo?.expires_at
-    ? new Date(licenseInfo.expires_at).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })
+    ? new Date(licenseInfo.expires_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
     : '-';
 
-  const daysRemainingText = licenseInfo?.days_left === 0 ? 'Hari ini berakhir' : `Sisa ${licenseInfo?.days_left} hari lagi`;
-  const licenseTypeText = isTrial ? 'Trial (Masa Uji Coba)' : (licenseInfo?.type || 'Produksi');
-  const routeQuotaText = `${totalRouteCount} / ${maxRoutes > 0 ? maxRoutes : 'Unlimited'} Channel`;
+  const daysRemainingText = licenseInfo?.days_left === 0 ? 'Expires today' : `${licenseInfo?.days_left} days remaining`;
+  const licenseTypeText = isTrial ? 'Trial (Evaluation Mode)' : (licenseInfo?.type || 'Production');
+  const routeQuotaText = `${totalRouteCount} / ${maxRoutes > 0 ? maxRoutes : 'Unlimited'} Channels`;
+
+  const customerDisplay = licenseInfo?.customer === 'Evaluasi Trial / Uji Coba'
+    ? 'Trial Evaluation'
+    : (licenseInfo?.customer || '-');
+
+  const licenseMessageDisplay = licenseInfo?.message
+    ? (licenseInfo.message
+        .replace('Masa evaluasi Trial aktif sampai', 'Trial evaluation active until')
+        .replace('Tersisa', '')
+        .replace('hari', 'days remaining')
+        .replace('Masa evaluasi Trial telah berakhir pada', 'Trial evaluation expired on')
+        .replace('Silakan masukkan License Key untuk aktivasi penuh.', 'Please enter License Key for full activation.'))
+    : 'Checking license status...';
 
   return (
     <div style={{
@@ -164,13 +177,13 @@ function LicenseStatusCard({ licenseInfo, totalRouteCount, activeRouteCount }) {
       padding: '1.5rem',
       boxShadow: '0 2px 4px rgba(0,0,0,0.03)'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div>
           <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--primary)' }}>
-            Status Lisensi & Masa Berlaku
+            License Status & Validity
           </h3>
           <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            {licenseInfo?.message || 'Memeriksa status lisensi...'}
+            {licenseMessageDisplay}
           </p>
         </div>
         <span style={{
@@ -190,22 +203,22 @@ function LicenseStatusCard({ licenseInfo, totalRouteCount, activeRouteCount }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem' }}>
         <div style={{ padding: '0.85rem', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Tipe Lisensi</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>License Type</div>
           <div style={{ fontWeight: 700, fontSize: '0.95rem', color: isTrial ? '#D97706' : 'var(--text-main)' }}>
             {licenseTypeText}
           </div>
         </div>
 
         <div style={{ padding: '0.85rem', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Instansi / Klien</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Organization / Client</div>
           <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-main)' }}>
-            {licenseInfo?.customer || '-'}
+            {customerDisplay}
           </div>
         </div>
 
         <div style={{ padding: '0.85rem', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px' }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-            {isTrial ? 'Tanggal Kadaluarsa Trial' : 'Tanggal Kadaluarsa'}
+            {isTrial ? 'Trial Expiration Date' : 'Expiration Date'}
           </div>
           <div style={{ fontWeight: 700, fontSize: '0.95rem', color: isExpired ? '#EF4444' : 'var(--text-main)' }}>
             {formattedExpiry}
@@ -223,16 +236,16 @@ function LicenseStatusCard({ licenseInfo, totalRouteCount, activeRouteCount }) {
         </div>
 
         <div style={{ padding: '0.85rem', backgroundColor: 'var(--bg-subtle)', borderRadius: '8px' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Kuota Channel (Total)</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Channel Quota (Total)</div>
           <div style={{ fontWeight: 700, fontSize: '0.95rem', color: isExceeded ? '#EF4444' : 'var(--text-main)' }}>
             {routeQuotaText}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-            {activeRouteCount} Aktif (Enable) | {totalRouteCount - activeRouteCount} Nonaktif (Disabled)
+            {activeRouteCount} Enabled | {totalRouteCount - activeRouteCount} Disabled
           </div>
           {isExceeded && (
             <div style={{ fontSize: '0.75rem', color: '#EF4444', marginTop: '0.2rem', fontWeight: 600 }}>
-              Melebihi kuota lisensi!
+              License quota exceeded!
             </div>
           )}
         </div>
@@ -248,12 +261,12 @@ function LicenseStatusCard({ licenseInfo, totalRouteCount, activeRouteCount }) {
           fontSize: '0.8rem',
           color: '#B45309'
         }}>
-          ℹ️ <b>Ketentuan Evaluasi Trial:</b> Batas maksimal <b>10 channel</b> (dihitung baik status Enable maupun Disabled). Channel yang sudah dibuat <b>tidak dapat dihapus</b> selama masa trial.
+          ℹ️ <b>Trial Evaluation Terms:</b> Maximum limit of <b>10 channels</b> (counting both Enabled and Disabled). Created channels <b>cannot be deleted</b> during the trial period.
         </div>
       )}
 
       <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-light)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-        📁 <b>Lokasi Berkas di Mesin:</b>{' '}
+        📁 <b>File Location on Machine:</b>{' '}
         <code style={{ fontFamily: 'monospace', color: 'var(--primary)' }}>
           {licenseInfo?.file_path || 'license.key'}
         </code>
@@ -277,10 +290,10 @@ function LicenseActivationCard({ licenseKeyInput, setLicenseKeyInput, licenseMsg
       boxShadow: '0 2px 4px rgba(0,0,0,0.03)'
     }}>
       <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem', fontWeight: 700, color: 'var(--primary)' }}>
-        Input License Key yang Dibuat
+        Enter Generated License Key
       </h3>
       <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-        Tempelkan (paste) teks License Key terenkripsi yang telah digenerate dari tool lisensi untuk ID Mesin ini.
+        Paste the encrypted License Key generated from the license tool for this Machine ID.
       </p>
 
       {licenseMsg?.text && (
@@ -301,7 +314,7 @@ function LicenseActivationCard({ licenseKeyInput, setLicenseKeyInput, licenseMsg
         <textarea
           className="form-control"
           rows={4}
-          placeholder="Tempelkan teks License Key di sini (contoh: eyJjdXN0b21lciI6...)"
+          placeholder="Paste License Key text here (e.g. eyJjdXN0b21lciI6...)"
           value={licenseKeyInput}
           onChange={e => setLicenseKeyInput(e.target.value)}
           style={{
@@ -322,10 +335,10 @@ function LicenseActivationCard({ licenseKeyInput, setLicenseKeyInput, licenseMsg
             onClick={() => { setLicenseKeyInput(''); setLicenseMsg({ text: '', type: '' }); }}
             disabled={!licenseKeyInput && !licenseMsg?.text}
           >
-            Bersihkan
+            Clear
           </button>
           <button type="submit" className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-            <ShieldCheck size={16} /> Aktivasi License Key
+            <ShieldCheck size={16} /> Activate License Key
           </button>
         </div>
       </form>
@@ -340,10 +353,10 @@ function LicenseActivationCard({ licenseKeyInput, setLicenseKeyInput, licenseMsg
         color: 'var(--text-muted)'
       }}>
         <div style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.35rem' }}>
-          🛠 Cara Menerbitkan License Key via CLI Generator (Admin):
+          🛠 How to Issue License Key via CLI Generator (Admin):
         </div>
         <code>
-          go run ./tools/license-gen -machine &quot;{machineCode || 'ID-MESIN'}&quot; -customer &quot;RS Hermina&quot; -days 365 -max-routes 10
+          go run ./tools/license-gen -machine &quot;{machineCode || 'MACHINE-ID'}&quot; -customer &quot;RS Hermina&quot; -days 365 -max-routes 10
         </code>
       </div>
     </div>
@@ -497,13 +510,13 @@ function App() {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Gagal membuat channel.");
+        alert(data.error || "Failed to create channel.");
         return;
       }
       void fetchRoutes();
     } catch (e) {
       console.error(e);
-      alert("Gagal menghubungi server");
+      alert("Failed to connect to server");
     }
   };
 
@@ -527,7 +540,7 @@ function App() {
       const res = await fetch(`${API_BASE}/routes/${id}/toggle`, { method: 'PUT' });
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || "Gagal mengubah status channel.");
+        alert(data.error || "Failed to update channel status.");
         return;
       }
       void fetchRoutes();
@@ -541,37 +554,37 @@ function App() {
       const res = await fetch(`${API_BASE}/routes/${id}/clone`, { method: 'POST' });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Gagal menggandakan channel.");
+        alert(data.error || "Failed to clone channel.");
         return;
       }
       void fetchRoutes();
     } catch (e) {
       console.error(e);
-      alert("Gagal menghubungi server");
+      alert("Failed to connect to server");
     }
   };
 
   const deleteRoute = async (id) => {
     if (licenseInfo?.is_trial) {
-      alert("Channel tidak dapat dihapus selama mode evaluasi Trial.");
+      alert("Channels cannot be deleted during Trial evaluation mode.");
       return;
     }
     const route = routes.find(r => r.id === id);
-    if (!confirm(`Apakah Anda yakin ingin menghapus channel "${route?.name || id}"?`)) {
+    if (!confirm(`Are you sure you want to delete channel "${route?.name || id}"?`)) {
       return;
     }
     try {
       const res = await fetch(`${API_BASE}/routes/${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Gagal menghapus channel.");
+        alert(data.error || "Failed to delete channel.");
         return;
       }
       setSelectedRouteId(null);
       void fetchRoutes();
     } catch (e) {
       console.error(e);
-      alert("Gagal menghubungi server");
+      alert("Failed to connect to server");
     }
   };
 
@@ -1208,7 +1221,7 @@ function App() {
             <img src={faviconLogo} alt="Logo" className="login-logo-img" />
           </div>
           <h2 className="login-title">HealthConnect</h2>
-          <p className="login-subtitle">Platform Interoperabilitas Layanan Kesehatan & FHIR</p>
+          <p className="login-subtitle">Healthcare Interoperability & FHIR Platform</p>
           {loginError && <div style={{ color: '#EF4444', fontSize: '0.875rem', textAlign: 'center' }}>{loginError}</div>}
           <div>
             <label htmlFor="loginUser" style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Username</label>
@@ -1331,7 +1344,7 @@ function App() {
   const handleActivateLicense = async (e) => {
     e?.preventDefault();
     if (!licenseKeyInput.trim()) {
-      setLicenseMsg({ text: 'Mohon tempelkan (paste) kode lisensi terlebih dahulu', type: 'error' });
+      setLicenseMsg({ text: 'Please paste the license key first', type: 'error' });
       return;
     }
     try {
@@ -1342,14 +1355,14 @@ function App() {
       });
       const data = await res.json();
       if (res.ok && data.valid) {
-        setLicenseMsg({ text: `Lisensi berhasil diaktifkan untuk: ${data.customer}`, type: 'success' });
+        setLicenseMsg({ text: `License successfully activated for: ${data.customer}`, type: 'success' });
         setLicenseKeyInput('');
         void fetchLicense();
       } else {
-        setLicenseMsg({ text: data.error || 'Aktivasi lisensi gagal. Periksa kembali kode lisensi dan Machine Code.', type: 'error' });
+        setLicenseMsg({ text: data.error || 'License activation failed. Please check the license key and Machine Code.', type: 'error' });
       }
     } catch (e) {
-      setLicenseMsg({ text: 'Gagal menghubungi server backend: ' + e.message, type: 'error' });
+      setLicenseMsg({ text: 'Failed to connect to backend server: ' + e.message, type: 'error' });
     }
   };
 
@@ -1410,45 +1423,45 @@ function App() {
               <span style={{ color: 'var(--success-dark)', fontWeight: 700, display: 'inline-flex', alignItems: 'center' }}>
                 <ArrowUpRight size={14} /> 100%
               </span>
-              <span>konektor interoperabilitas siap</span>
+              <span>interoperability connectors ready</span>
             </div>
           </div>
 
           <div className="kpi-card" style={{ '--kpi-accent': 'var(--accent-cyan)', '--kpi-bg': 'var(--accent-cyan-light)' }}>
             <div className="kpi-header">
-              <span className="kpi-title">Pesan Diterima (Inbound)</span>
+              <span className="kpi-title">Inbound Messages</span>
               <div className="kpi-icon-wrap" style={{ color: 'var(--accent-cyan)' }}><Network size={18} /></div>
             </div>
             <div className="kpi-value">{totalReceived}</div>
             <div className="kpi-footer">
               <span style={{ color: 'var(--accent-cyan)', fontWeight: 700 }}>HL7 / FHIR / JSON</span>
-              <span>dari SIMRS</span>
+              <span>from HIS</span>
             </div>
           </div>
 
           <div className="kpi-card" style={{ '--kpi-accent': 'var(--success)', '--kpi-bg': 'var(--success-light)' }}>
             <div className="kpi-header">
-              <span className="kpi-title">Terkirim (Outbound)</span>
+              <span className="kpi-title">Outbound Sent</span>
               <div className="kpi-icon-wrap" style={{ color: 'var(--success)' }}><ShieldCheck size={18} /></div>
             </div>
             <div className="kpi-value" style={{ color: 'var(--success)' }}>{totalSent}</div>
             <div className="kpi-footer">
               <span style={{ color: 'var(--success-dark)', fontWeight: 700, display: 'inline-flex', alignItems: 'center' }}>
-                <ArrowUpRight size={14} /> Berhasil
+                <ArrowUpRight size={14} /> Successful
               </span>
-              <span>menuju target endpoint</span>
+              <span>to target endpoints</span>
             </div>
           </div>
 
           <div className="kpi-card" style={{ '--kpi-accent': 'var(--accent-red)', '--kpi-bg': 'var(--accent-red-light)' }}>
             <div className="kpi-header">
-              <span className="kpi-title">Kendala & Error</span>
+              <span className="kpi-title">Issues & Errors</span>
               <div className="kpi-icon-wrap" style={{ color: 'var(--accent-red)' }}><HeartPulse size={18} /></div>
             </div>
             <div className="kpi-value" style={{ color: totalError > 0 ? 'var(--accent-red)' : 'var(--text-main)' }}>{totalError}</div>
             <div className="kpi-footer">
               <span style={{ color: totalError > 0 ? 'var(--accent-red)' : 'var(--success)', fontWeight: 700 }}>
-                {totalError === 0 ? '✓ Nihil insiden' : `Perlu atensi teknis`}
+                {totalError === 0 ? '✓ Zero incidents' : 'Requires technical attention'}
               </span>
             </div>
           </div>
@@ -1460,8 +1473,8 @@ function App() {
           <div className="chart-card">
             <div className="chart-card-header">
               <div>
-                <h3 className="chart-card-title">Volume Aliran Data Integrasi per Channel</h3>
-                <p className="chart-card-subtitle">Komparasi pesan masuk (Inbound) vs terkirim (Outbound)</p>
+                <h3 className="chart-card-title">Integration Data Flow Volume per Channel</h3>
+                <p className="chart-card-subtitle">Comparison of Inbound vs Outbound messages</p>
               </div>
               <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--primary)', background: 'var(--primary-light)', padding: '0.2rem 0.6rem', borderRadius: '999px' }}>
                 Live Stream
@@ -1469,7 +1482,7 @@ function App() {
             </div>
 
             {routes.length === 0 ? (
-              <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>Belum ada channel terdaftar</div>
+              <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No channels registered yet</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem', marginTop: '0.5rem' }}>
                 {routes.map(r => {
@@ -1509,8 +1522,8 @@ function App() {
           <div className="chart-card">
             <div className="chart-card-header">
               <div>
-                <h3 className="chart-card-title">Rasio Status Eksekusi</h3>
-                <p className="chart-card-subtitle">Distribusi penanganan payload</p>
+                <h3 className="chart-card-title">Execution Status Ratio</h3>
+                <p className="chart-card-subtitle">Payload handling distribution</p>
               </div>
             </div>
 
@@ -1548,13 +1561,13 @@ function App() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.78rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)' }}></span> Berhasil
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)' }}></span> Sent
                 </span>
                 <span style={{ fontWeight: 700 }}>{totalSent}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent-cyan)' }}></span> Terfilter
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent-cyan)' }}></span> Filtered
                 </span>
                 <span style={{ fontWeight: 700 }}>{totalFiltered}</span>
               </div>
@@ -1566,7 +1579,7 @@ function App() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warning)' }}></span> Antrian
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warning)' }}></span> Queued
                 </span>
                 <span style={{ fontWeight: 700 }}>{totalQueue}</span>
               </div>
@@ -1609,7 +1622,7 @@ function App() {
           <img src={faviconLogo} alt="Logo" className="brand-logo-img" />
           <div className="brand-info">
             <span className="brand-title">HealthConnect</span>
-            <span className="brand-tag">Interoperabilitas RS</span>
+            <span className="brand-tag">Hospital Interoperability</span>
           </div>
         </div>
         <nav className="sidebar-menu main-nav">
@@ -1623,7 +1636,7 @@ function App() {
             <KeyRound size={16} /> Environments
           </button>
           <button className={activeTab === 'license' ? 'active' : ''} onClick={() => { setActiveTab('license'); void fetchLicense(); }}>
-            <Award size={16} /> License & Mesin
+            <Award size={16} /> License & Machine
           </button>
           <button className={activeTab === 'users' ? 'active' : ''} onClick={() => { setActiveTab('users'); void fetchUsers(); }}>
             <UsersIcon size={16} /> Users
@@ -1650,7 +1663,7 @@ function App() {
                 disabled={!selectedRouteId}
                 style={{ color: '#ef4444' }}
                 onClick={() => selectedRouteId && deleteRoute(selectedRouteId)}
-                title={licenseInfo?.is_trial ? 'Channel tidak dapat dihapus selama mode Trial' : 'Hapus Channel'}
+                title={licenseInfo?.is_trial ? 'Channels cannot be deleted during Trial mode' : 'Delete Channel'}
               >
                 Delete Channel
               </button>
@@ -1698,7 +1711,7 @@ function App() {
                   <Menu size={24} color="var(--primary)" />
                 </button>
                 <h1 className="page-title">
-                  {{ 'integrations': 'Channels', 'logs': 'Message Logs', 'users': 'Users', 'environments': 'Global Environments', 'license': 'Manajemen Lisensi & Mesin' }[activeTab] || 'Dashboard'}
+                  {{ 'integrations': 'Channels', 'logs': 'Message Logs', 'users': 'Users', 'environments': 'Global Environments', 'license': 'License & Machine Management' }[activeTab] || 'Dashboard'}
                 </h1>
               </div>
             </div>

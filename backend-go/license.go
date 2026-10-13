@@ -269,9 +269,9 @@ func ReloadAndVerifyLicense() LicenseStatus {
 
 		status.IsTrial = true
 		status.Type = "TRIAL"
-		status.Customer = "Evaluasi Trial / Uji Coba"
+		status.Customer = "Trial Evaluation"
 		status.ExpiresAt = trialExp.Format("2006-01-02")
-		status.MaxRoutes = 10 // Trial 10 channel (baik enable maupun disabled)
+		status.MaxRoutes = 10 // Trial 10 channels (both enabled and disabled)
 		status.DaysLeft = daysLeft
 		status.Claims = LicenseClaims{
 			MachineCode: machineCode,
@@ -285,11 +285,11 @@ func ReloadAndVerifyLicense() LicenseStatus {
 		if time.Now().Before(trialExp) {
 			status.Valid = true
 			status.StatusText = "TRIAL_ACTIVE"
-			status.Message = fmt.Sprintf("Masa evaluasi Trial aktif sampai %s (Tersisa %d hari)", status.ExpiresAt, daysLeft)
+			status.Message = fmt.Sprintf("Trial evaluation active until %s (%d days remaining)", status.ExpiresAt, daysLeft)
 		} else {
 			status.Valid = false
 			status.StatusText = "TRIAL_EXPIRED"
-			status.Message = fmt.Sprintf("Masa evaluasi Trial telah berakhir pada %s. Silakan masukkan License Key untuk aktivasi penuh.", status.ExpiresAt)
+			status.Message = fmt.Sprintf("Trial evaluation expired on %s. Please enter a License Key for full activation.", status.ExpiresAt)
 		}
 
 		currentLicenseStatus = status
@@ -301,7 +301,7 @@ func ReloadAndVerifyLicense() LicenseStatus {
 	if err != nil {
 		status.Valid = false
 		status.StatusText = "INVALID"
-		status.Message = fmt.Sprintf("Lisensi tidak valid: %v", err)
+		status.Message = fmt.Sprintf("Invalid license: %v", err)
 		currentLicenseStatus = status
 		return status
 	}
@@ -311,7 +311,7 @@ func ReloadAndVerifyLicense() LicenseStatus {
 	if err != nil {
 		status.Valid = false
 		status.StatusText = "INVALID"
-		status.Message = "Format tanggal kedaluwarsa lisensi tidak valid."
+		status.Message = "Invalid license expiration date format."
 		currentLicenseStatus = status
 		return status
 	}
@@ -337,19 +337,19 @@ func ReloadAndVerifyLicense() LicenseStatus {
 		status.Valid = false
 		if status.IsTrial {
 			status.StatusText = "TRIAL_EXPIRED"
-			status.Message = fmt.Sprintf("Lisensi Trial telah kedaluwarsa pada %s.", claims.ExpiresAt)
+			status.Message = fmt.Sprintf("Trial license expired on %s.", claims.ExpiresAt)
 		} else {
 			status.StatusText = "EXPIRED"
-			status.Message = fmt.Sprintf("Lisensi telah kedaluwarsa pada %s.", claims.ExpiresAt)
+			status.Message = fmt.Sprintf("License expired on %s.", claims.ExpiresAt)
 		}
 	} else {
 		status.Valid = true
 		if status.IsTrial {
 			status.StatusText = "TRIAL_ACTIVE"
-			status.Message = fmt.Sprintf("Lisensi Trial resmi aktif untuk %s (Tersisa %d hari sampai %s)", claims.Customer, daysLeft, claims.ExpiresAt)
+			status.Message = fmt.Sprintf("Official Trial license active for %s (%d days remaining until %s)", claims.Customer, daysLeft, claims.ExpiresAt)
 		} else {
 			status.StatusText = "ACTIVE"
-			status.Message = fmt.Sprintf("Lisensi resmi aktif untuk %s (Tersisa %d hari sampai %s)", claims.Customer, daysLeft, claims.ExpiresAt)
+			status.Message = fmt.Sprintf("Official license active for %s (%d days remaining until %s)", claims.Customer, daysLeft, claims.ExpiresAt)
 		}
 	}
 
@@ -367,12 +367,12 @@ func VerifyLicenseKey(encodedLicense string, currentMachineCode string) (*Licens
 
 	var payload LicensePayload
 	if err := json.Unmarshal(jsonBytes, &payload); err != nil {
-		return nil, errors.New("format payload lisensi rusak")
+		return nil, errors.New("corrupted license payload format")
 	}
 
 	// Check machine binding
 	if payload.Claims.MachineCode != "*" && payload.Claims.MachineCode != currentMachineCode {
-		return nil, fmt.Errorf("kode mesin tidak cocok (lisensi diterbitkan untuk %s, mesin Anda: %s)", payload.Claims.MachineCode, currentMachineCode)
+		return nil, fmt.Errorf("machine code mismatch (license issued for %s, your machine: %s)", payload.Claims.MachineCode, currentMachineCode)
 	}
 
 	// Verify RSA signature
@@ -383,12 +383,12 @@ func VerifyLicenseKey(encodedLicense string, currentMachineCode string) (*Licens
 
 	sigBytes, err := base64.StdEncoding.DecodeString(payload.Signature)
 	if err != nil {
-		return nil, errors.New("signature lisensi rusak")
+		return nil, errors.New("corrupted license signature")
 	}
 
 	block, _ := pem.Decode([]byte(LicensePublicKeyPEM))
 	if block == nil {
-		return nil, errors.New("gagal memuat public key verifikasi")
+		return nil, errors.New("failed to load verification public key")
 	}
 
 	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
@@ -397,13 +397,13 @@ func VerifyLicenseKey(encodedLicense string, currentMachineCode string) (*Licens
 	}
 	rsaPub, ok := pub.(*rsa.PublicKey)
 	if !ok {
-		return nil, errors.New("tipe public key tidak didukung")
+		return nil, errors.New("unsupported public key type")
 	}
 
 	hashed := sha256.Sum256(claimsBytes)
 	err = rsa.VerifyPKCS1v15(rsaPub, crypto.SHA256, hashed[:], sigBytes)
 	if err != nil {
-		return nil, errors.New("tanda tangan digital lisensi tidak sah (tampered)")
+		return nil, errors.New("invalid digital signature (tampered)")
 	}
 
 	return &payload.Claims, nil
@@ -443,9 +443,9 @@ func CheckCanCreateRoute() error {
 
 	if !lic.Valid {
 		if lic.IsTrial {
-			return fmt.Errorf("Masa evaluasi Trial telah berakhir pada %s. Silakan masukkan License Key untuk menambah channel.", lic.ExpiresAt)
+			return fmt.Errorf("Trial evaluation period ended on %s. Please enter a License Key to add channels.", lic.ExpiresAt)
 		}
-		return errors.New("Aplikasi membutuhkan lisensi aktif untuk menambah channel.")
+		return errors.New("Active license required to add channels.")
 	}
 
 	maxRoutes := lic.MaxRoutes
@@ -463,9 +463,9 @@ func CheckCanCreateRoute() error {
 
 		if totalCount >= maxRoutes {
 			if lic.IsTrial {
-				return fmt.Errorf("Batas kuota Trial tercapai (maksimal %d channel terdaftar, baik enable maupun disabled). Channel tidak dapat ditambah lagi.", maxRoutes)
+				return fmt.Errorf("Trial quota reached (maximum %d channels, including enabled and disabled). Cannot add more channels.", maxRoutes)
 			}
-			return fmt.Errorf("Batas kuota total channel tercapai (%d / %d channel). Upgrade lisensi untuk menambah channel.", totalCount, maxRoutes)
+			return fmt.Errorf("Total channel quota reached (%d / %d channels). Upgrade license to add more channels.", totalCount, maxRoutes)
 		}
 	}
 	return nil
@@ -478,7 +478,7 @@ func CheckCanDeleteRoute() error {
 	currentLicenseMutex.RUnlock()
 
 	if lic.IsTrial {
-		return errors.New("Channel tidak dapat dihapus selama mode evaluasi Trial.")
+		return errors.New("Channels cannot be deleted during Trial evaluation mode.")
 	}
 	return nil
 }
@@ -491,9 +491,9 @@ func CheckMaxRouteLimit() error {
 
 	if !lic.Valid {
 		if lic.IsTrial {
-			return fmt.Errorf("Masa evaluasi Trial telah berakhir pada %s. Silakan masukkan License Key untuk mengaktifkan channel.", lic.ExpiresAt)
+			return fmt.Errorf("Trial evaluation period ended on %s. Please enter a License Key to enable channels.", lic.ExpiresAt)
 		}
-		return errors.New("Aplikasi membutuhkan lisensi aktif untuk mengaktifkan channel.")
+		return errors.New("Active license required to enable channels.")
 	}
 
 	// Dalam mode Trial, hingga 10 channel yang dibuat bebas di-enable atau di-disable
@@ -514,7 +514,7 @@ func CheckMaxRouteLimit() error {
 		}
 
 		if activeCount >= maxRoutes {
-			return fmt.Errorf("Batas kuota channel aktif telah tercapai (%d / %d channel). Upgrade lisensi untuk menambah channel.", activeCount, maxRoutes)
+			return fmt.Errorf("Active channel quota reached (%d / %d channels). Upgrade license to add channels.", activeCount, maxRoutes)
 		}
 	}
 
@@ -538,7 +538,7 @@ func activateLicense(c *gin.Context) {
 		LicenseKey string `json:"license_key"`
 	}
 	if err := c.BindJSON(&input); err != nil || strings.TrimSpace(input.LicenseKey) == "" {
-		c.JSON(400, gin.H{"error": "License key wajib diisi"})
+		c.JSON(400, gin.H{"error": "License key is required"})
 		return
 	}
 
@@ -552,7 +552,7 @@ func activateLicense(c *gin.Context) {
 	currentLicenseMutex.RUnlock()
 
 	c.JSON(200, gin.H{
-		"message": "Lisensi berhasil diaktivasi!",
+		"message": "License successfully activated!",
 		"status":  status,
 	})
 }
