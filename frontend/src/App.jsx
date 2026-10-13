@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, TerminalSquare, ChevronDown, ChevronRight, Menu, LayoutDashboard, GitMerge, KeyRound, Users as UsersIcon, LogOut, ArrowUpRight, Layers, ShieldCheck, HeartPulse, Network, Award, Copy, Check } from './icons';
+import { ArrowLeft, Save, Plus, TerminalSquare, ChevronDown, ChevronRight, Menu, LayoutDashboard, GitMerge, KeyRound, Users as UsersIcon, LogOut, ArrowUpRight, Layers, ShieldCheck, HeartPulse, Network, Award, Copy, Check } from './icons';
 import ChannelEditor from './ChannelEditor';
 import faviconLogo from '../assets/favicon.ico';
 
@@ -397,6 +397,67 @@ function App() {
   const [licenseKeyInput, setLicenseKeyInput] = useState('');
   const [licenseMsg, setLicenseMsg] = useState({ text: '', type: '' });
   const [copiedCode, setCopiedCode] = useState(false);
+  const [initialRouteSnapshot, setInitialRouteSnapshot] = useState(null);
+
+  const cleanRouteForComparison = (r) => {
+    if (!r) return '';
+    const { activeTargetIdx, channelTab, ...persistedData } = r;
+    return JSON.stringify(persistedData);
+  };
+
+  const isRouteDirty = () => {
+    if (!editingRoute || !initialRouteSnapshot) return false;
+    return cleanRouteForComparison(editingRoute) !== initialRouteSnapshot;
+  };
+
+  const navigateToTab = (tab) => {
+    if (editingRoute) {
+      if (isRouteDirty()) {
+        const tabLabels = {
+          dashboard: 'Dashboard',
+          integrations: 'Channels',
+          environments: 'Environments',
+          license: 'License & Machine',
+          users: 'Users',
+          logs: 'Message Logs'
+        };
+        const targetLabel = tabLabels[tab] || tab;
+        const confirmLeave = window.confirm(
+          `You have unsaved changes in channel "${editingRoute.name || 'Untitled'}". Discard changes and go to ${targetLabel}?`
+        );
+        if (!confirmLeave) return;
+      }
+      setEditingRoute(null);
+      setInitialRouteSnapshot(null);
+    }
+    setActiveTab(tab);
+    setIsSidebarOpen(false);
+    if (tab === 'environments') void fetchVariables();
+    if (tab === 'license') void fetchLicense();
+    if (tab === 'users') void fetchUsers();
+  };
+
+  const handleCloseEditor = () => {
+    if (editingRoute && isRouteDirty()) {
+      const confirmLeave = window.confirm(
+        `You have unsaved changes in channel "${editingRoute.name || 'Untitled'}". Discard changes and return to Channels?`
+      );
+      if (!confirmLeave) return;
+    }
+    setEditingRoute(null);
+    setInitialRouteSnapshot(null);
+  };
+
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (editingRoute && isRouteDirty()) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [editingRoute, initialRouteSnapshot]);
 
   useEffect(() => {
     if (token) {
@@ -649,6 +710,7 @@ function App() {
       }
 
       setEditingRoute(null);
+      setInitialRouteSnapshot(null);
       void fetchRoutes();
     } catch (e) {
       console.error(e);
@@ -749,7 +811,7 @@ function App() {
       if (!sourceVars[k]) sourceVars[k] = v;
     });
 
-    setEditingRoute({
+    const preparedRoute = {
       ...route,
       source: {
         ...sourceEp,
@@ -767,7 +829,10 @@ function App() {
       activeTargetIdx: 0,
       channelTab: 'source', // 'source' or 'destinations'
       transformer: route.transformer || { script: '', source_script: '', inbound_template: '', outbound_template: '' }
-    });
+    };
+
+    setEditingRoute(preparedRoute);
+    setInitialRouteSnapshot(cleanRouteForComparison(preparedRoute));
   };
 
   const getLogContent = () => {
@@ -1209,6 +1274,14 @@ function App() {
   };
 
   const handleLogout = () => {
+    if (editingRoute && isRouteDirty()) {
+      const confirmLeave = window.confirm(
+        `You have unsaved changes in channel "${editingRoute.name || 'Untitled'}". Discard changes and logout?`
+      );
+      if (!confirmLeave) return;
+    }
+    setEditingRoute(null);
+    setInitialRouteSnapshot(null);
     setToken('');
     localStorage.removeItem('token');
   };
@@ -1626,24 +1699,46 @@ function App() {
           </div>
         </div>
         <nav className="sidebar-menu main-nav">
-          <button className={activeTab === 'dashboard' ? 'active' : ''} onClick={() => setActiveTab('dashboard')}>
+          <button className={(!editingRoute && activeTab === 'dashboard') ? 'active' : ''} onClick={() => navigateToTab('dashboard')}>
             <LayoutDashboard size={16} /> Dashboard
           </button>
-          <button className={activeTab === 'integrations' ? 'active' : ''} onClick={() => setActiveTab('integrations')}>
+          <button className={(editingRoute || activeTab === 'integrations') ? 'active' : ''} onClick={() => navigateToTab('integrations')}>
             <GitMerge size={16} /> Channels
           </button>
-          <button className={activeTab === 'environments' ? 'active' : ''} onClick={() => { setActiveTab('environments'); void fetchVariables(); }}>
+          <button className={(!editingRoute && activeTab === 'environments') ? 'active' : ''} onClick={() => navigateToTab('environments')}>
             <KeyRound size={16} /> Environments
           </button>
-          <button className={activeTab === 'license' ? 'active' : ''} onClick={() => { setActiveTab('license'); void fetchLicense(); }}>
+          <button className={(!editingRoute && activeTab === 'license') ? 'active' : ''} onClick={() => navigateToTab('license')}>
             <Award size={16} /> License & Machine
           </button>
-          <button className={activeTab === 'users' ? 'active' : ''} onClick={() => { setActiveTab('users'); void fetchUsers(); }}>
+          <button className={(!editingRoute && activeTab === 'users') ? 'active' : ''} onClick={() => navigateToTab('users')}>
             <UsersIcon size={16} /> Users
           </button>
         </nav>
 
-        {activeTab === 'integrations' && (
+        {editingRoute ? (
+          <>
+            <div className="sidebar-section">Active Channel</div>
+            <nav className="sidebar-menu">
+              <div style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                <span style={{ fontWeight: 600, color: 'var(--primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={editingRoute.name}>
+                  ✏️ {editingRoute.name || 'Untitled'}
+                </span>
+                {isRouteDirty() && (
+                  <span style={{ fontSize: '0.65rem', color: '#D97706', backgroundColor: 'rgba(217, 119, 6, 0.1)', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 700, flexShrink: 0 }}>
+                    MODIFIED
+                  </span>
+                )}
+              </div>
+              <button onClick={saveRoute} style={{ color: 'var(--primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Save size={15} /> Save Channel
+              </button>
+              <button onClick={handleCloseEditor} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <ArrowLeft size={15} /> Back to Channels
+              </button>
+            </nav>
+          </>
+        ) : activeTab === 'integrations' ? (
           <>
             <div className="sidebar-section">Channel Tasks</div>
             <nav className="sidebar-menu">
@@ -1679,7 +1774,7 @@ function App() {
               </button>
             </nav>
           </>
-        )}
+        ) : null}
 
         <div className="sidebar-section">Other</div>
         <nav className="sidebar-menu" style={{ marginTop: 'auto', marginBottom: '1rem' }}>
@@ -1697,7 +1792,8 @@ function App() {
             testStatus={testStatus}
             testConnection={testConnection}
             saveRoute={saveRoute}
-            onClose={() => setEditingRoute(null)}
+            onClose={handleCloseEditor}
+            isDirty={isRouteDirty()}
           />
         ) : (
           <>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Save, Play, Filter, Trash2, Plus, Eye, EyeOff } from './icons';
 
 function VariablesEditor({
@@ -127,9 +127,24 @@ export default function ChannelEditor({
   testStatus = {},
   testConnection,
   saveRoute,
-  onClose
+  onClose,
+  isDirty = false
 }) {
   const [visibleVars, setVisibleVars] = useState({});
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveRoute();
+      } else if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [saveRoute, onClose]);
+
   if (!editingRoute) return null;
 
   const targets = editingRoute.targets || [];
@@ -221,8 +236,15 @@ export default function ChannelEditor({
             <ArrowLeft size={16} /> Channels
           </button>
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, marginRight: '1rem' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Channel Editor
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Channel Editor
+              </span>
+              {isDirty && (
+                <span style={{ fontSize: '0.7rem', color: '#D97706', backgroundColor: 'rgba(217, 119, 6, 0.1)', border: '1px solid rgba(217, 119, 6, 0.25)', padding: '0.15rem 0.5rem', borderRadius: '999px', fontWeight: 600 }}>
+                  ● Unsaved Changes
+                </span>
+              )}
             </div>
             <input
               value={editingRoute.name}
@@ -233,10 +255,10 @@ export default function ChannelEditor({
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          <button className="btn btn-secondary" onClick={onClose} style={{ padding: '0.6rem 1.1rem' }}>
+          <button className="btn btn-secondary" onClick={onClose} style={{ padding: '0.6rem 1.1rem' }} title="Cancel and return to Channels (Esc)">
             Cancel
           </button>
-          <button className="btn btn-primary" onClick={saveRoute} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.25rem', fontWeight: 'bold' }}>
+          <button className="btn btn-primary" onClick={saveRoute} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.25rem', fontWeight: 'bold' }} title="Save Channel (Ctrl+S)">
             <Save size={18} /> Save Channel
           </button>
         </div>

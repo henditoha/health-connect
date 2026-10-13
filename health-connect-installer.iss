@@ -1,4 +1,4 @@
-; Script generated and fixed for Health Connect Middleware
+; Script generated and fixed for Health Connect Engine
 
 #define MyAppName "Health Connect"
 #define MyAppVersion "0.1"

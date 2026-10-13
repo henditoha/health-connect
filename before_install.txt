@@ -1,4 +1,4 @@
-Selamat datang di instalasi Health Connect Middleware!
+Selamat datang di instalasi Health Connect Engine!
 
 Health Connect adalah mesin integrasi pintar yang dirancang untuk menjembatani komunikasi data antar sistem kesehatan (seperti HIS, LIS, PACS, dan SATUSEHAT) dengan cepat dan aman.
 

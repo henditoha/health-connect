@@ -1,6 +1,6 @@
 Instalasi Selesai! 🎉
 
-Health Connect Middleware telah berhasil dipasang di komputer Anda.
+Health Connect Engine telah berhasil dipasang di komputer Anda.
 
 LANGKAH SELANJUTNYA:
 1. Buka aplikasi melalui Shortcut "Health Connect" yang ada di Desktop Anda.
