@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -11,6 +12,12 @@ import (
 var (
 	connMu     sync.Mutex
 	connCounts = make(map[string]int)
+
+	// In-memory cache to prevent database overload from frequent stats polling
+	statsCacheMu   sync.RWMutex
+	cachedStats    map[string]*RouteStats
+	lastStatsFetch time.Time
+	statsTTL       = 4 * time.Second
 )
 
 func connOpened(routeID string) {
@@ -113,12 +120,49 @@ func loadConnectionStats(stats map[string]*RouteStats) {
 	}
 }
 
-func getStats(c *gin.Context) {
-	stats := make(map[string]*RouteStats)
+func copyStatsMap(src map[string]*RouteStats) map[string]*RouteStats {
+	dst := make(map[string]*RouteStats, len(src))
+	for k, v := range src {
+		if v != nil {
+			dst[k] = &RouteStats{
+				Received:    v.Received,
+				Filtered:    v.Filtered,
+				Queue:       v.Queue,
+				Sent:        v.Sent,
+				Error:       v.Error,
+				Connections: v.Connections,
+			}
+		}
+	}
+	return dst
+}
 
+func getStats(c *gin.Context) {
+	statsCacheMu.RLock()
+	if cachedStats != nil && time.Since(lastStatsFetch) < statsTTL {
+		copied := copyStatsMap(cachedStats)
+		statsCacheMu.RUnlock()
+		c.JSON(200, copied)
+		return
+	}
+	statsCacheMu.RUnlock()
+
+	statsCacheMu.Lock()
+	defer statsCacheMu.Unlock()
+
+	// Double check under write lock
+	if cachedStats != nil && time.Since(lastStatsFetch) < statsTTL {
+		c.JSON(200, copyStatsMap(cachedStats))
+		return
+	}
+
+	stats := make(map[string]*RouteStats)
 	loadLogStats(stats)
 	loadQueueStats(stats)
 	loadConnectionStats(stats)
 
-	c.JSON(200, stats)
+	cachedStats = stats
+	lastStatsFetch = time.Now()
+
+	c.JSON(200, copyStatsMap(cachedStats))
 }

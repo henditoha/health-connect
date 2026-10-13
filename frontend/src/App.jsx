@@ -467,8 +467,42 @@ function App() {
       void fetchLogs(1);
       void fetchStats();
       void fetchLicense();
-      const timer = setInterval(() => { void fetchStats(); }, 5000);
-      return () => clearInterval(timer);
+
+      // Smart Polling: Only poll stats while the browser tab is actively visible to the user
+      let timer = null;
+      const startPolling = () => {
+        if (!timer) {
+          timer = setInterval(() => {
+            if (document.visibilityState === 'visible') {
+              void fetchStats();
+            }
+          }, 5000);
+        }
+      };
+
+      const stopPolling = () => {
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+      };
+
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          void fetchStats(); // immediate update when tab becomes focused again
+          startPolling();
+        } else {
+          stopPolling();
+        }
+      };
+
+      startPolling();
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      return () => {
+        stopPolling();
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
     }
   }, [token]);
 

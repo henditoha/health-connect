@@ -137,6 +137,18 @@ func initDb() error {
 	db.Exec("ALTER TABLE routes ADD COLUMN variables TEXT DEFAULT '{}'")
 	db.Exec("ALTER TABLE transformers ADD COLUMN source_script TEXT DEFAULT ''")
 
+	// High-performance indexes: speed up stats aggregation and log filtering without full table scans
+	indexes := []string{
+		"CREATE INDEX IF NOT EXISTS idx_message_logs_route_status ON message_logs(route_id, status)",
+		"CREATE INDEX IF NOT EXISTS idx_message_logs_created_at ON message_logs(created_at)",
+		"CREATE INDEX IF NOT EXISTS idx_queue_messages_status_route ON queue_messages(status, route_id)",
+	}
+	for _, idx := range indexes {
+		if _, err := db.Exec(idx); err != nil {
+			log.Printf("Index initialization note: %v", err)
+		}
+	}
+
 	// Ensure default admin user exists
 	var count int
 	db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
