@@ -450,7 +450,6 @@ export default function ChannelEditor({
                       <option value="sqlite">SQLite</option>
                       <option value="hdb">SAP HANA</option>
                       <option value="odbc">ODBC (Generic)</option>
-                      <option value="iris">InterSystems IRIS (via ODBC)</option>
                     </select>
                   </div>
                   <div className="form-group">
