@@ -10,6 +10,8 @@ frontend/.vite/
 *.so
 *.dylib
 backend-go/health-connect.exe
+backend-go/middleware
+middleware
 
 # Database & local data
 *.db
@@ -26,3 +28,10 @@ Thumbs.db
 .idea/
 *.log
 *.pem
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+*.env.local
+backend-go/.env
+!backend-go/.env.example

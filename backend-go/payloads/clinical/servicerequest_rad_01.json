@@ -1,0 +1,41 @@
+{
+  "resourceType": "ServiceRequest",
+  "status": "active",
+  "intent": "order",
+  "category": [
+    {
+      "coding": [
+        {
+          "system": "http://snomed.info/sct",
+          "code": "363679005",
+          "display": "Imaging"
+        }
+      ]
+    }
+  ],
+  "code": {
+    "coding": [
+      {
+        "system": "http://snomed.info/sct",
+        "code": "168731009",
+        "display": "Standard chest X-ray"
+      }
+    ]
+  },
+  "subject": {
+    "reference": "Patient/P20395156715"
+  },
+  "encounter": {
+    "reference": "Encounter/84390bb5-3cfa-475b-8881-e1ffd92431c3"
+  },
+  "occurrenceDateTime": "2026-10-31T01:52:07.331Z",
+  "authoredOn": "2026-10-31T01:52:07.331Z",
+  "requester": {
+    "reference": "Practitioner/N10000001"
+  },
+  "performer": [
+    {
+      "reference": "Practitioner/N10000001"
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "resourceType": "Encounter",
+  "status": "arrived",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "Rawat Jalan (Ambulatory)"
+  },
+  "subject": {
+    "reference": "Patient/P20395156715",
+    "display": "Pasien Uji Coba 08"
+  },
+  "participant": [
+    {
+      "type": [
+        {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ParticipationType",
+              "code": "ATND",
+              "display": "attender"
+            }
+          ]
+        }
+      ],
+      "individual": {
+        "reference": "Practitioner/N10000001",
+        "display": "Dokter Pemeriksa SATUSEHAT Staging"
+      }
+    }
+  ],
+  "period": {
+    "start": "2026-10-31T01:16:24.371Z"
+  },
+  "location": [
+    {
+      "location": {
+        "reference": "Location/4fa0413f-403d-40fb-8be8-1e690a0e8931",
+        "display": "Poli Spesialis Luka"
+      }
+    }
+  ],
+  "statusHistory": [
+    {
+      "status": "arrived",
+      "period": {
+        "start": "2026-10-31T01:16:24.371Z"
+      }
+    }
+  ],
+  "serviceProvider": {
+    "reference": "Organization/YOUR_SATUSEHAT_ORG_ID"
+  },
+  "identifier": [
+    {
+      "system": "http://sys-ids.kemkes.go.id/encounter/YOUR_SATUSEHAT_ORG_ID",
+      "value": "REG-20261031-08-DV7W"
+    }
+  ]
+}

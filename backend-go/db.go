@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -22,6 +23,7 @@ var dbType string
 const queryInsertGlobalVar = "INSERT INTO global_variables (id, key_name, value_data, is_secret, description) VALUES (?, ?, ?, ?, ?)"
 
 func initDb() error {
+	loadDotEnv()
 	dbType = os.Getenv("DB_TYPE")
 	if dbType == "" {
 		dbType = "sqlite"
@@ -222,52 +224,65 @@ func seedDefaultSatusehatTemplate() {
 
 	// 3. Default Gateway Route
 	defaultScript := `// ============================================================================
-// SATUSEHAT MULTI-TENANT DYNAMIC TRANSFORMER
+// SATUSEHAT STG DYNAMIC TRANSFORMER & AUTO REFRESH TOKEN
+// Channel: SATUSEHAT Multi-Tenant Gateway
 // ============================================================================
 
-// 1. Parse Inbound JSON Payload from SIMRS
+// 1. Parse Inbound Request from SIMRS
 var raw = JSON.parse(input);
 
-var hospitalCode = raw.hospital_code || raw.hospitalCode || raw.tenant_id;
-var resourceType = raw.resource || raw.resourceType;
+// Extract routing parameters
+var hospitalCode = raw.hospital_code || raw.hospitalCode || raw.tenant_id || "";
+var resourceType = raw.resource || raw.resourceType || "";
 var httpMethod = (raw.method || "POST").toUpperCase();
 var resourceId = raw.resource_id || raw.id || "";
 var fhirData = raw.data || raw.payload || raw;
 
-if (!hospitalCode) {
-    throw new Error("Missing hospital_code in request payload");
+if (!resourceType && fhirData && fhirData.resourceType) {
+    resourceType = fhirData.resourceType;
 }
 if (!resourceType) {
-    throw new Error("Missing resource type in request payload (e.g. Encounter, CarePlan)");
+    throw new Error("Missing resourceType in request payload (e.g. Encounter, Patient, Condition, Observation)");
 }
 
-// 2. Lookup Hospital Credentials from Encrypted Global Variable
-var tenantsJson = getGlobalVar("TENANT_CREDENTIALS");
-if (!tenantsJson) {
-    throw new Error("TENANT_CREDENTIALS variable not found in Global Variables");
-}
+// 2. Resolve Credentials (org_id, client_id, client_secret)
+// Supports both Multi-Tenant (via TENANT_CREDENTIALS) and Single/Default (via Channel Variables)
+var orgId = "";
+var clientId = "";
+var clientSecret = "";
 
-var tenants = JSON.parse(tenantsJson);
-var tenant = tenants[hospitalCode];
-if (!tenant) {
-    throw new Error("Hospital code '" + hospitalCode + "' is not registered in TENANT_CREDENTIALS");
+if (hospitalCode) {
+    var tenantsJson = getGlobalVar("TENANT_CREDENTIALS");
+    if (tenantsJson) {
+        try {
+            var tenants = JSON.parse(tenantsJson);
+            var tenant = tenants[hospitalCode];
+            if (tenant) {
+                var satusehatCfg = tenant.satusehat || tenant;
+                orgId = satusehatCfg.org_id || "";
+                clientId = satusehatCfg.client_id || "";
+                clientSecret = satusehatCfg.client_secret || "";
+            }
+        } catch (e) {}
+    }
 }
-
-var satusehatCfg = tenant.satusehat || tenant;
-var clientId = satusehatCfg.client_id;
-var clientSecret = satusehatCfg.client_secret;
-var orgId = satusehatCfg.org_id;
 
 if (!clientId || !clientSecret) {
-    throw new Error("Client ID or Client Secret missing for hospital: " + hospitalCode);
+    orgId = orgId || getRouteVar("ORG_ID") || getGlobalVar("SATUSEHAT_ORG_ID") || "";
+    clientId = clientId || getRouteVar("CLIENT_ID") || getGlobalVar("SATUSEHAT_CLIENT_ID") || "";
+    clientSecret = clientSecret || getRouteVar("CLIENT_SECRET") || getGlobalVar("SATUSEHAT_CLIENT_SECRET") || "";
 }
 
-// 3. Obtain OAuth2 Access Token (In-Memory Cache with TTL)
-var cacheKey = "satusehat_token_" + hospitalCode;
+if (!clientId || !clientSecret) {
+    throw new Error("SATUSEHAT STG credentials missing: configure ORG_ID, CLIENT_ID, CLIENT_SECRET in Channel Variables or TENANT_CREDENTIALS for: " + (hospitalCode || "DEFAULT"));
+}
+
+// 3. Automated OAuth2 Token & Auto-Refresh Management (In-Memory Cache with TTL)
+var cacheKey = "satusehat_stg_token_" + (hospitalCode || orgId || clientId);
 var token = cache.get(cacheKey);
 
 if (!token) {
-    var authUrl = getGlobalVar("SATUSEHAT_AUTH_URL") || "https://api-satusehat-stg.kemkes.go.id/oauth2/v1/accesstoken?grant_type=client_credentials";
+    var authUrl = getRouteVar("AUTH_URL") || getGlobalVar("SATUSEHAT_AUTH_URL") || "https://api-satusehat-stg.kemkes.go.id/oauth2/v1/accesstoken?grant_type=client_credentials";
     var formBody = "client_id=" + encodeURIComponent(clientId) + "&client_secret=" + encodeURIComponent(clientSecret);
     
     var authRes = http.request({
@@ -281,31 +296,39 @@ if (!token) {
     });
 
     if (authRes.status !== 200) {
-        throw new Error("Failed to authenticate with SATUSEHAT for " + hospitalCode + ": " + authRes.status + " " + authRes.body);
+        throw new Error("Failed to authenticate with SATUSEHAT STG (" + authRes.status + "): " + authRes.body);
     }
 
     var authData = JSON.parse(authRes.body);
     if (!authData.access_token) {
-        throw new Error("SATUSEHAT Auth response did not contain access_token: " + authRes.body);
+        throw new Error("SATUSEHAT STG Auth response missing access_token: " + authRes.body);
     }
 
     token = authData.access_token;
-    var expiresIn = parseInt(authData.expires_in, 10) || 3000;
+    var expiresIn = parseInt(authData.expires_in, 10) || 3600;
+    // Auto-refresh token 300 seconds (5 mins) before expiry
     var cacheTtl = Math.max(300, expiresIn - 300);
     cache.set(cacheKey, token, cacheTtl);
 }
 
-// 4. Enrich Organization ID if needed
-if (orgId && typeof fhirData === 'object' && fhirData !== null) {
-    if (resourceType === 'Encounter' && !fhirData.serviceProvider) {
+// 4. Enrich FHIR Resource with Organization ID if applicable
+if (orgId && typeof fhirData === "object" && fhirData !== null) {
+    if (resourceType === "Encounter" && !fhirData.serviceProvider) {
         fhirData.serviceProvider = {
             "reference": "Organization/" + orgId
         };
     }
+    // Clean non-standard routing fields so SATUSEHAT receives pure FHIR
+    delete fhirData.hospital_code;
+    delete fhirData.hospitalCode;
+    delete fhirData.tenant_id;
+    delete fhirData.resource;
+    delete fhirData.resource_id;
+    delete fhirData.method;
 }
 
-// 5. Construct Dynamic Target URL from Config Variable
-var rawBaseUrl = getGlobalVar("SATUSEHAT_FHIR_URL") || "https://api-satusehat-stg.kemkes.go.id/fhir-r4/v1";
+// 5. Build Dynamic SATUSEHAT STG Target URL
+var rawBaseUrl = getRouteVar("FHIR_BASE_URL") || getGlobalVar("SATUSEHAT_FHIR_URL") || "https://api-satusehat-stg.kemkes.go.id/fhir-r4/v1";
 var baseUrl = rawBaseUrl.replace(/\/+$/, "");
 var targetUrl = baseUrl + "/" + resourceType;
 if (resourceId && (httpMethod === "PUT" || httpMethod === "GET")) {
@@ -325,25 +348,86 @@ return JSON.stringify({
     payload: fhirData
 });`
 
+	orgId := os.Getenv("SATUSEHAT_ORG_ID")
+	if orgId == "" {
+		orgId = "YOUR_SATUSEHAT_ORG_ID"
+	}
+	clientId := os.Getenv("SATUSEHAT_CLIENT_ID")
+	if clientId == "" {
+		clientId = "YOUR_SATUSEHAT_CLIENT_ID"
+	}
+	clientSecret := os.Getenv("SATUSEHAT_CLIENT_SECRET")
+	if clientSecret == "" {
+		clientSecret = "YOUR_SATUSEHAT_CLIENT_SECRET"
+	}
+	defaultVars := fmt.Sprintf(`{"ORG_ID":"%s","CLIENT_ID":"%s","CLIENT_SECRET":"%s","AUTH_URL":"https://api-satusehat-stg.kemkes.go.id/oauth2/v1/accesstoken?grant_type=client_credentials","FHIR_BASE_URL":"https://api-satusehat-stg.kemkes.go.id/fhir-r4/v1","ENV":"STAGING"}`, orgId, clientId, clientSecret)
+	targetConfig := `{"name":"SATUSEHAT STG","enabled":true,"url":"https://api-satusehat-stg.kemkes.go.id/fhir-r4/v1","host":"https://api-satusehat-stg.kemkes.go.id","path":"/fhir-r4/v1","authType":"bearer","token":"{{SATUSEHAT_TOKEN}}","org_id":"{{ORG_ID}}","client_id":"{{CLIENT_ID}}","client_secret":"{{CLIENT_SECRET}}"}`
+
 	var routeCount int
 	db.QueryRow("SELECT COUNT(*) FROM routes WHERE id = 'satusehat' OR name = 'SATUSEHAT Multi-Tenant Gateway'").Scan(&routeCount)
 	if routeCount == 0 {
 		routeID := "satusehat"
 		db.Exec("INSERT INTO routes (id, name, description, group_name, active, variables) VALUES (?, ?, ?, ?, ?, ?)",
-			routeID, "SATUSEHAT Multi-Tenant Gateway", "1 Ingress Gateway untuk 10 RS & 19 Resources SATUSEHAT Staging", "SATUSEHAT KEMENKES", 1, "{}")
+			routeID, "SATUSEHAT Multi-Tenant Gateway", "1 Ingress Gateway untuk Multi-RS & 19 Resources SATUSEHAT Staging dengan Token Auto-Refresh", "SATUSEHAT KEMENKES", 1, defaultVars)
 
 		// Source Endpoint
 		db.Exec("INSERT INTO endpoints (id, route_id, role, protocol, format, config) VALUES (?, ?, ?, ?, ?, ?)",
-			uuid.New().String(), routeID, "source", "http", "json", `{"ackBehavior":"deferred"}`)
+			uuid.New().String(), routeID, "source", "http", "json", `{"path":"/ingress/satusehat","ackBehavior":"deferred"}`)
 
-		// Target Endpoint
+		// Target Endpoint: SATUSEHAT STG
 		db.Exec("INSERT INTO endpoints (id, route_id, role, protocol, format, config) VALUES (?, ?, ?, ?, ?, ?)",
-			uuid.New().String(), routeID, "target", "http", "json", `{"name":"SATUSEHAT Gateway","enabled":true,"url":"https://api-satusehat-stg.kemkes.go.id"}`)
+			uuid.New().String(), routeID, "target", "http", "json", targetConfig)
 
 		db.Exec("INSERT INTO transformers (id, route_id, source_script, script, inbound_template, outbound_template) VALUES (?, ?, ?, ?, ?, ?)",
-			uuid.New().String(), routeID, defaultScript, defaultScript, "", "")
+			uuid.New().String(), routeID, defaultScript, defaultScript, "{}", "{}")
 	} else {
-		// Update transformer script to support dynamic SATUSEHAT_AUTH_URL and SATUSEHAT_FHIR_URL
+		// Update existing route configuration
+		db.Exec("UPDATE routes SET name = 'SATUSEHAT Multi-Tenant Gateway', group_name = 'SATUSEHAT KEMENKES' WHERE id = 'satusehat'")
+		
+		// Set default variables if empty
+		var currentVars string
+		db.QueryRow("SELECT variables FROM routes WHERE id = 'satusehat'").Scan(&currentVars)
+		if currentVars == "" || currentVars == "{}" {
+			db.Exec("UPDATE routes SET variables = ? WHERE id = 'satusehat'", defaultVars)
+		}
+
+		// Update or ensure target endpoint has SATUSEHAT STG configuration
+		var tgtCount int
+		db.QueryRow("SELECT COUNT(*) FROM endpoints WHERE route_id = 'satusehat' AND role = 'target'").Scan(&tgtCount)
+		if tgtCount == 0 {
+			db.Exec("INSERT INTO endpoints (id, route_id, role, protocol, format, config) VALUES (?, 'satusehat', 'target', 'http', 'json', ?)",
+				uuid.New().String(), targetConfig)
+		} else {
+			db.Exec("UPDATE endpoints SET config = ?, protocol = 'http', format = 'json' WHERE route_id = 'satusehat' AND role = 'target'", targetConfig)
+		}
+
+		// Update transformer scripts with auto-refresh token support
 		db.Exec("UPDATE transformers SET source_script = ?, script = ? WHERE route_id = 'satusehat'", defaultScript, defaultScript)
 	}
 }
+
+func loadDotEnv() {
+	paths := []string{".env", "backend-go/.env", "../.env"}
+	for _, p := range paths {
+		data, err := os.ReadFile(p)
+		if err == nil {
+			lines := strings.Split(string(data), "\n")
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if line == "" || strings.HasPrefix(line, "#") {
+					continue
+				}
+				parts := strings.SplitN(line, "=", 2)
+				if len(parts) == 2 {
+					k := strings.TrimSpace(parts[0])
+					v := strings.Trim(strings.TrimSpace(parts[1]), `"'`)
+					if os.Getenv(k) == "" {
+						os.Setenv(k, v)
+					}
+				}
+			}
+			break
+		}
+	}
+}
+

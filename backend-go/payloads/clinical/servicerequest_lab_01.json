@@ -1,0 +1,41 @@
+{
+  "resourceType": "ServiceRequest",
+  "status": "active",
+  "intent": "order",
+  "category": [
+    {
+      "coding": [
+        {
+          "system": "http://snomed.info/sct",
+          "code": "108252007",
+          "display": "Laboratory procedure"
+        }
+      ]
+    }
+  ],
+  "code": {
+    "coding": [
+      {
+        "system": "http://loinc.org",
+        "code": "718-7",
+        "display": "Hemoglobin [Mass/volume] in Blood"
+      }
+    ]
+  },
+  "subject": {
+    "reference": "Patient/P20395156715"
+  },
+  "encounter": {
+    "reference": "Encounter/92229908-bd12-4d61-b64a-cf3d8679daf5"
+  },
+  "occurrenceDateTime": "2026-10-31T01:52:04.216Z",
+  "authoredOn": "2026-10-31T01:52:04.216Z",
+  "requester": {
+    "reference": "Practitioner/N10000001"
+  },
+  "performer": [
+    {
+      "reference": "Practitioner/N10000001"
+    }
+  ]
+}

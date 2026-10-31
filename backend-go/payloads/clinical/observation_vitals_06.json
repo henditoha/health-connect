@@ -1,0 +1,73 @@
+{
+  "resourceType": "Observation",
+  "status": "final",
+  "category": [
+    {
+      "coding": [
+        {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "vital-signs",
+          "display": "Vital Signs"
+        }
+      ]
+    }
+  ],
+  "code": {
+    "coding": [
+      {
+        "system": "http://loinc.org",
+        "code": "85354-9",
+        "display": "Blood pressure panel with all children optional"
+      }
+    ]
+  },
+  "subject": {
+    "reference": "Patient/P20395156715"
+  },
+  "encounter": {
+    "reference": "Encounter/84390bb5-3cfa-475b-8881-e1ffd92431c3"
+  },
+  "effectiveDateTime": "2026-10-31T01:52:01.100Z",
+  "issued": "2026-10-31T01:52:01.100Z",
+  "performer": [
+    {
+      "reference": "Practitioner/N10000001"
+    }
+  ],
+  "component": [
+    {
+      "code": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "8480-6",
+            "display": "Systolic blood pressure"
+          }
+        ]
+      },
+      "valueQuantity": {
+        "value": 115,
+        "unit": "mm[Hg]",
+        "system": "http://unitsofmeasure.org",
+        "code": "mm[Hg]"
+      }
+    },
+    {
+      "code": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "8462-4",
+            "display": "Diastolic blood pressure"
+          }
+        ]
+      },
+      "valueQuantity": {
+        "value": 75,
+        "unit": "mm[Hg]",
+        "system": "http://unitsofmeasure.org",
+        "code": "mm[Hg]"
+      }
+    }
+  ]
+}

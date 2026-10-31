@@ -1,0 +1,41 @@
+{
+  "id": "satusehat",
+  "name": "SATUSEHAT Multi-Tenant Gateway",
+  "description": "1 Ingress Gateway untuk Multi-RS & 19 Resources SATUSEHAT Staging dengan Token Auto-Refresh",
+  "group_name": "SATUSEHAT KEMENKES",
+  "active": true,
+  "variables": {
+    "ORG_ID": "YOUR_SATUSEHAT_ORG_ID",
+    "CLIENT_ID": "YOUR_SATUSEHAT_CLIENT_ID",
+    "CLIENT_SECRET": "YOUR_SATUSEHAT_CLIENT_SECRET",
+    "AUTH_URL": "https://api-satusehat-stg.kemkes.go.id/oauth2/v1/accesstoken?grant_type=client_credentials",
+    "FHIR_BASE_URL": "https://api-satusehat-stg.kemkes.go.id/fhir-r4/v1",
+    "ENV": "STAGING"
+  },
+  "endpoints": [
+    {
+      "id": "ep-satusehat-src",
+      "route_id": "satusehat",
+      "role": "source",
+      "protocol": "http",
+      "format": "json",
+      "config": "{\"path\":\"/ingress/satusehat\",\"ackBehavior\":\"deferred\"}"
+    },
+    {
+      "id": "ep-satusehat-tgt",
+      "route_id": "satusehat",
+      "role": "target",
+      "protocol": "http",
+      "format": "json",
+      "config": "{\"name\":\"SATUSEHAT STG\",\"enabled\":true,\"url\":\"https://api-satusehat-stg.kemkes.go.id/fhir-r4/v1\",\"host\":\"https://api-satusehat-stg.kemkes.go.id\",\"path\":\"/fhir-r4/v1\",\"authType\":\"bearer\",\"token\":\"{{SATUSEHAT_TOKEN}}\",\"org_id\":\"{{ORG_ID}}\",\"client_id\":\"{{CLIENT_ID}}\",\"client_secret\":\"{{CLIENT_SECRET}}\"}"
+    }
+  ],
+  "transformer": {
+    "id": "tr-satusehat",
+    "route_id": "satusehat",
+    "source_script": "// SATUSEHAT STG Ingress & Auto-Token\nvar raw = JSON.parse(input);\nvar hospitalCode = raw.hospital_code || raw.hospitalCode || raw.tenant_id || \"\";\nvar resourceType = raw.resource || raw.resourceType || (raw.data && raw.data.resourceType) || \"\";\nvar httpMethod = (raw.method || \"POST\").toUpperCase();\nvar resourceId = raw.resource_id || raw.id || \"\";\nvar fhirData = raw.data || raw.payload || raw;\n\nif (!resourceType) throw new Error(\"Missing resourceType\");\n\nvar orgId = getRouteVar(\"ORG_ID\") || \"\";\nvar clientId = getRouteVar(\"CLIENT_ID\") || \"\";\nvar clientSecret = getRouteVar(\"CLIENT_SECRET\") || \"\";\n\nif (hospitalCode) {\n  var tenantsJson = getGlobalVar(\"TENANT_CREDENTIALS\");\n  if (tenantsJson) {\n    try {\n      var t = JSON.parse(tenantsJson)[hospitalCode];\n      if (t) {\n        var cfg = t.satusehat || t;\n        orgId = cfg.org_id || orgId;\n        clientId = cfg.client_id || clientId;\n        clientSecret = cfg.client_secret || clientSecret;\n      }\n    } catch(e) {}\n  }\n}\n\nvar cacheKey = \"satusehat_stg_token_\" + (hospitalCode || orgId || clientId);\nvar token = cache.get(cacheKey);\n\nif (!token) {\n  var authUrl = getRouteVar(\"AUTH_URL\") || \"https://api-satusehat-stg.kemkes.go.id/oauth2/v1/accesstoken?grant_type=client_credentials\";\n  var res = http.request({\n    url: authUrl,\n    method: \"POST\",\n    headers: { \"Content-Type\": \"application/x-www-form-urlencoded\" },\n    body: \"client_id=\" + encodeURIComponent(clientId) + \"&client_secret=\" + encodeURIComponent(clientSecret)\n  });\n  if (res.status !== 200) throw new Error(\"Auth failed: \" + res.status + \" \" + res.body);\n  var auth = JSON.parse(res.body);\n  token = auth.access_token;\n  var ttl = Math.max(300, (parseInt(auth.expires_in, 10) || 3600) - 300);\n  cache.set(cacheKey, token, ttl);\n}\n\nvar baseUrl = (getRouteVar(\"FHIR_BASE_URL\") || \"https://api-satusehat-stg.kemkes.go.id/fhir-r4/v1\").replace(/\\/+$/, \"\");\nvar targetUrl = baseUrl + \"/\" + resourceType + (resourceId ? \"/\" + resourceId : \"\");\n\nreturn JSON.stringify({\n  __dispatch: {\n    url: targetUrl,\n    method: httpMethod,\n    headers: { \"Authorization\": \"Bearer \" + token, \"Content-Type\": \"application/json\" }\n  },\n  payload: fhirData\n});",
+    "script": "// Destination mapping\nreturn input;",
+    "inbound_template": "{}",
+    "outbound_template": "{}"
+  }
+}

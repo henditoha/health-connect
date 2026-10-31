@@ -136,8 +136,8 @@ Jalankan: `.\health-connect.exe`, lalu buka http://localhost:3001 (frontend suda
 
 ```powershell
 cd D:\middleware\backend-go
-# opsional: generate ulang resource icon (rsrc.syso) dari app.ico
-rsrc -ico app.ico -o rsrc.syso
+# opsional: generate ulang resource icon (rsrc_windows_amd64.syso) dari app.ico
+rsrc -ico app.ico -o rsrc_windows_amd64.syso
 
 $env:GOOS="windows"; $env:GOARCH="amd64"
 go build -ldflags "-s -w" -o health-connect-x64.exe .

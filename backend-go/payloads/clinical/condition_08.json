@@ -1,0 +1,40 @@
+{
+  "resourceType": "Condition",
+  "clinicalStatus": {
+    "coding": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+        "code": "active",
+        "display": "Active"
+      }
+    ]
+  },
+  "category": [
+    {
+      "coding": [
+        {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "encounter-diagnosis",
+          "display": "Encounter Diagnosis"
+        }
+      ]
+    }
+  ],
+  "code": {
+    "coding": [
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10",
+        "code": "M79.1",
+        "display": "Myalgia"
+      }
+    ]
+  },
+  "subject": {
+    "reference": "Patient/P20395156715",
+    "display": "Pasien Terdaftar"
+  },
+  "encounter": {
+    "reference": "Encounter/318f18aa-839b-4d84-8d54-1374a5a9596d"
+  },
+  "recordedDate": "2026-10-31T01:51:56.559Z"
+}
