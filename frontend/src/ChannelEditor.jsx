@@ -855,8 +855,25 @@ export default function ChannelEditor({
                 </div>
 
                 {activeDest.protocol === 'dicom' && (
-                  <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: '#0284c7' }}>
-                    ℹ️ Payload pemeriksaan dari channel ini akan otomatis disimpan ke antrean <strong>DICOM Modality Worklist (MWL)</strong> lokal dengan redundansi ke Study Description, Req Proc Description, dan Series Description.
+                  <div style={{
+                    marginTop: '0.75rem',
+                    padding: '0.85rem 1rem',
+                    backgroundColor: '#eff6ff',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: '8px',
+                    color: '#1e40af',
+                    fontSize: '0.82rem',
+                    lineHeight: '1.5'
+                  }}>
+                    <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                      <span>💾 Auto-Save ke Database Worklist Internal (Zero-Config)</span>
+                    </div>
+                    <div>
+                      Saat memilih protokol <strong>DICOM (MWL / PACS)</strong>, Anda <strong>tidak perlu mengetik connection string atau query SQL manual</strong>. Sistem secara otomatis mengekstrak data pasien/order dan menyimpannya ke database internal (tabel <code>dicom_worklist_items</code>), sekaligus menduplikat deskripsi tindakan ke 3 tag DICOM (Study, Req Proc, Series Description). Data ini langsung disajikan ke mesin modalitas via port DICOM 11112 dan dapat dipantau di menu <strong>DICOM MWL</strong>.
+                    </div>
+                    <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed #bfdbfe', fontSize: '0.78rem', color: '#1d4ed8' }}>
+                      💡 <em>Ingin menyimpan ke database eksternal Anda sendiri (PostgreSQL, MySQL, SQL Server, Oracle)? Ganti <strong>Protocol / Method</strong> di atas ke <strong>"Database Insert / Query"</strong>, atau klik <strong>"+ Add Destination"</strong> untuk menyimpan ke database custom sekaligus!</em>
+                    </div>
                   </div>
                 )}
 
