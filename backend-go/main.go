@@ -124,6 +124,10 @@ func main() {
 		api.PUT("/users/:id/status", toggleUserStatus)
 	}
 
+	// DICOM Modality Worklist (MWL) & Server Routes
+	RegisterDicomRoutes(r)
+	InitDicomServer()
+
 	// Ingress
 	r.POST("/ingress/:routeId", handleIngress)
 
@@ -421,16 +425,50 @@ func handleIngress(c *gin.Context) {
 		return
 	}
 
+	inboundText := string(body)
+	isHL7 := IsHL7Payload(inboundText)
+
 	if getRouteAckBehavior(*route) == "immediate" {
-		c.String(200, "ACK")
-		engine.EnqueueMessage(route.ID, string(body))
+		if isHL7 {
+			_, msh, _ := ParseHL7ORMMessage(inboundText)
+			if msh == nil {
+				msh = &HL7MSHInfo{}
+			}
+			c.Header("Content-Type", "text/plain; charset=utf-8")
+			c.String(200, BuildHL7ACK(*msh, "AA", "Enqueued successfully"))
+		} else {
+			c.String(200, "ACK")
+		}
+		engine.EnqueueMessage(route.ID, inboundText)
 		return
 	}
 
-	success, resp, err := engine.ExecuteRoute(route.ID, string(body))
+	success, resp, err := engine.ExecuteRoute(route.ID, inboundText)
 	if success {
+		if isHL7 {
+			_, msh, _ := ParseHL7ORMMessage(inboundText)
+			if msh == nil {
+				msh = &HL7MSHInfo{}
+			}
+			c.Header("Content-Type", "text/plain; charset=utf-8")
+			c.String(200, BuildHL7ACK(*msh, "AA", "Order accepted and saved to SQL"))
+			return
+		}
 		c.String(200, resp)
 	} else {
+		if isHL7 {
+			_, msh, _ := ParseHL7ORMMessage(inboundText)
+			if msh == nil {
+				msh = &HL7MSHInfo{}
+			}
+			errMsg := "Error processing message"
+			if err != nil {
+				errMsg = err.Error()
+			}
+			c.Header("Content-Type", "text/plain; charset=utf-8")
+			c.String(500, BuildHL7ACK(*msh, "AE", errMsg))
+			return
+		}
 		c.JSON(500, gin.H{"error": err.Error()})
 	}
 }
@@ -613,6 +651,29 @@ func testTargetConnection(c *gin.Context, protocol string, config map[string]int
 		}
 		c.JSON(200, gin.H{"success": true, "message": "Destination channel exists and is ready"})
 
+	case "dicom":
+		host, _ := config["host"].(string)
+		if host == "" { host = "127.0.0.1" }
+		portStr, _ := config["port"].(string)
+		port := 11112
+		if p, err := strconv.Atoi(portStr); err == nil && p > 0 {
+			port = p
+		}
+		calledAET, _ := config["called_aet"].(string)
+		if calledAET == "" { calledAET = "HEALTH_CONNECT" }
+		callingAET, _ := config["calling_aet"].(string)
+		if callingAET == "" { callingAET = "HEALTH_CONNECT" }
+
+		duration, err := PingDicomServer(host, port, callingAET, calledAET)
+		if err != nil {
+			c.JSON(400, gin.H{"error": fmt.Sprintf("DICOM Ping Gagal ke %s:%d: %v", host, port, err)})
+			return
+		}
+		c.JSON(200, gin.H{
+			"success": true,
+			"message": fmt.Sprintf("DICOM Verification (C-ECHO) ke %s:%d Sukses! (Called AET: %s) [Latency: %v]", host, port, calledAET, duration.Round(time.Millisecond)),
+		})
+
 	default:
 		c.JSON(200, gin.H{"success": true, "message": "Target endpoint ready for deployment"})
 	}
@@ -737,7 +798,20 @@ func testSourceConnection(c *gin.Context, protocol string, config map[string]int
 			c.JSON(400, gin.H{"error": "TCP Listener port is required"})
 			return
 		}
-		c.JSON(200, gin.H{"success": true, "message": fmt.Sprintf("TCP Listener Port :%s is configured and ready", port)})
+		testAddr := fmt.Sprintf("127.0.0.1:%s", port)
+		l, err := net.Listen("tcp", testAddr)
+		if err != nil {
+			conn, dialErr := net.DialTimeout("tcp", testAddr, 500*time.Millisecond)
+			if dialErr == nil {
+				conn.Close()
+				c.JSON(200, gin.H{"success": true, "message": fmt.Sprintf("Port TCP :%s aktif dan menerima koneksi", port)})
+				return
+			}
+			c.JSON(400, gin.H{"error": fmt.Sprintf("Port TCP :%s tidak dapat dibuka: %v", port, err)})
+			return
+		}
+		l.Close()
+		c.JSON(200, gin.H{"success": true, "message": fmt.Sprintf("Port TCP :%s valid dan siap digunakan", port)})
 	case "http":
 		path, _ := config["path"].(string)
 		path = engine.interpolateVariables(path, dummyRoute)
@@ -745,6 +819,24 @@ func testSourceConnection(c *gin.Context, protocol string, config map[string]int
 			path = "/ingress/:id"
 		}
 		c.JSON(200, gin.H{"success": true, "message": fmt.Sprintf("HTTP Ingress endpoint '%s' is valid", path)})
+	case "dicom":
+		portStr, _ := config["port"].(string)
+		port := 11112
+		if p, err := strconv.Atoi(portStr); err == nil && p > 0 {
+			port = p
+		}
+		aet, _ := config["ae_title"].(string)
+		if aet == "" { aet = "HEALTH_CONNECT" }
+
+		duration, err := PingDicomServer("127.0.0.1", port, "HC_PING_TESTER", aet)
+		if err != nil {
+			c.JSON(400, gin.H{"error": fmt.Sprintf("DICOM SCP Ping Gagal di port :%d: %v", port, err)})
+			return
+		}
+		c.JSON(200, gin.H{
+			"success": true,
+			"message": fmt.Sprintf("DICOM Verification (C-ECHO Ping) Sukses! Server aktif di port :%d (AET: %s) [Latency: %v]", port, aet, duration.Round(time.Millisecond)),
+		})
 	default:
 		c.JSON(200, gin.H{"success": true, "message": "Source connector configured successfully"})
 	}

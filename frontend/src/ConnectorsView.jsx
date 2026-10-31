@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Play, Trash2, Edit2, ShieldCheck, KeyRound, Network, RefreshCw, Check, X } from './icons';
+import DatabaseConfigForm from './DatabaseConfigForm';
 
 export default function ConnectorsView({ apiBase }) {
   const [activeSubTab, setActiveSubTab] = useState('connectors'); // 'connectors' | 'registry'
@@ -286,6 +287,12 @@ export default function ConnectorsView({ apiBase }) {
                         {c.protocol === 'tcp' && (
                           <div><strong>Listen Port:</strong> {c.config?.port || '(not set)'}</div>
                         )}
+                        {c.protocol === 'dicom' && (
+                          <div>
+                            <div><strong>IP / Host:</strong> {c.config?.host || (c.role === 'target' ? '(not set)' : '0.0.0.0 (Semua LAN)')}</div>
+                            <div><strong>Port:</strong> {c.config?.port || 11112} • <strong>AET:</strong> {c.config?.ae_title || c.config?.called_aet || 'HEALTH_CONNECT'}</div>
+                          </div>
+                        )}
                         {c.protocol === 'http-poll' && (
                           <div><strong>Poll URL:</strong> {c.config?.url || '(not set)'}</div>
                         )}
@@ -503,64 +510,30 @@ export default function ConnectorsView({ apiBase }) {
                 </h4>
 
                 {editingConnector.protocol === 'database' && (
-                  <div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '0.75rem' }}>
-                      <div className="form-group">
-                        <label>Database Driver</label>
-                        <select
-                          className="form-control"
-                          value={editingConnector.config?.driver || 'mysql'}
-                          onChange={e => setEditingConnector({
-                            ...editingConnector,
-                            config: { ...(editingConnector.config || {}), driver: e.target.value }
-                          })}
-                        >
-                          {registry.database_drivers.map(d => (
-                            <option key={d.code} value={d.code}>{d.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="form-group">
-                        <label>Poll Interval (Seconds)</label>
-                        <input
-                          type="number"
-                          className="form-control"
-                          placeholder="60"
-                          value={editingConnector.config?.pollInterval || '60'}
-                          onChange={e => setEditingConnector({
-                            ...editingConnector,
-                            config: { ...(editingConnector.config || {}), pollInterval: e.target.value }
-                          })}
-                        />
-                      </div>
-                    </div>
-                    <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                      <label>Connection String (DSN)</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="e.g. DSN=SIMRS_IRIS;UID=user;PWD=pass; or user:pass@tcp(host:3306)/db"
-                        value={editingConnector.config?.dsn || ''}
-                        onChange={e => setEditingConnector({
-                          ...editingConnector,
-                          config: { ...(editingConnector.config || {}), dsn: e.target.value }
-                        })}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>Default Poller Query (Optional)</label>
-                      <textarea
-                        className="form-control"
-                        rows="2"
-                        placeholder="SELECT id, norm, nama FROM table WHERE status='new'"
-                        value={editingConnector.config?.query || ''}
-                        onChange={e => setEditingConnector({
-                          ...editingConnector,
-                          config: { ...(editingConnector.config || {}), query: e.target.value }
-                        })}
-                      />
-                    </div>
-                  </div>
+                  <DatabaseConfigForm
+                    driver={editingConnector.config?.driver || 'postgres'}
+                    dsn={editingConnector.config?.dsn || ''}
+                    onChangeDriver={newDriver => setEditingConnector(prev => ({
+                      ...prev,
+                      config: { ...(prev?.config || {}), driver: newDriver }
+                    }))}
+                    onChangeDsn={newDsn => setEditingConnector(prev => ({
+                      ...prev,
+                      config: { ...(prev?.config || {}), dsn: newDsn }
+                    }))}
+                    pollInterval={editingConnector.config?.pollInterval || '60'}
+                    onChangePollInterval={val => setEditingConnector(prev => ({
+                      ...prev,
+                      config: { ...(prev?.config || {}), pollInterval: val }
+                    }))}
+                    query={editingConnector.config?.query || ''}
+                    onChangeQuery={val => setEditingConnector(prev => ({
+                      ...prev,
+                      config: { ...(prev?.config || {}), query: val }
+                    }))}
+                    showPollerFields={editingConnector.role !== 'target'}
+                    isTarget={editingConnector.role === 'target'}
+                  />
                 )}
 
                 {editingConnector.protocol === 'http' && (
@@ -639,6 +612,123 @@ export default function ConnectorsView({ apiBase }) {
                         config: { ...(editingConnector.config || {}), port: e.target.value }
                       })}
                     />
+                  </div>
+                )}
+
+                {editingConnector.protocol === 'dicom' && (
+                  <div>
+                    {editingConnector.role === 'target' ? (
+                      <div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: '1rem', marginBottom: '1rem' }}>
+                          <div className="form-group">
+                            <label>Target PACS Host / IP Address *</label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              placeholder="e.g. 192.168.1.100 or pacs.hospital.lan"
+                              value={editingConnector.config?.host || ''}
+                              onChange={e => setEditingConnector({
+                                ...editingConnector,
+                                config: { ...(editingConnector.config || {}), host: e.target.value }
+                              })}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>PACS DICOM Port *</label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              placeholder="104"
+                              value={editingConnector.config?.port || '104'}
+                              onChange={e => setEditingConnector({
+                                ...editingConnector,
+                                config: { ...(editingConnector.config || {}), port: e.target.value }
+                              })}
+                            />
+                          </div>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                          <div className="form-group">
+                            <label>Called AE Title (Target PACS) *</label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              placeholder="PACS_SERVER"
+                              value={editingConnector.config?.called_aet || 'PACS_SERVER'}
+                              onChange={e => setEditingConnector({
+                                ...editingConnector,
+                                config: { ...(editingConnector.config || {}), called_aet: e.target.value }
+                              })}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Calling AE Title (Local) *</label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              placeholder="HEALTH_CONNECT"
+                              value={editingConnector.config?.calling_aet || 'HEALTH_CONNECT'}
+                              onChange={e => setEditingConnector({
+                                ...editingConnector,
+                                config: { ...(editingConnector.config || {}), calling_aet: e.target.value }
+                              })}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px 1fr', gap: '1rem', marginBottom: '0.75rem' }}>
+                          <div className="form-group">
+                            <label>Listen Host / IP Address</label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              placeholder="0.0.0.0 (Semua LAN)"
+                              value={editingConnector.config?.host || '0.0.0.0'}
+                              onChange={e => setEditingConnector({
+                                ...editingConnector,
+                                config: { ...(editingConnector.config || {}), host: e.target.value }
+                              })}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>DICOM Port *</label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              placeholder="11112"
+                              value={editingConnector.config?.port || '11112'}
+                              onChange={e => setEditingConnector({
+                                ...editingConnector,
+                                config: { ...(editingConnector.config || {}), port: e.target.value }
+                              })}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Called AE Title *</label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              placeholder="HEALTH_CONNECT"
+                              value={editingConnector.config?.ae_title || 'HEALTH_CONNECT'}
+                              onChange={e => setEditingConnector({
+                                ...editingConnector,
+                                config: { ...(editingConnector.config || {}), ae_title: e.target.value }
+                              })}
+                            />
+                          </div>
+                        </div>
+                        <div style={{
+                          backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px',
+                          padding: '10px 12px', fontSize: '12px', color: '#166534', lineHeight: 1.5
+                        }}>
+                          💡 <strong>Setting IP Address pada Mesin Modalitas (X-Ray / CT / MRI / USG):</strong><br />
+                          Server Health-Connect mendengarkan di IP <code>0.0.0.0</code> (semua network interface LAN server).<br />
+                          Di konsol modalitas radiologi Anda, masukkan <strong>IP komputer/server Health-Connect ini</strong> (misal <code>192.168.1.50</code>), Port: <code>{editingConnector.config?.port || '11112'}</code>, dan AE Title: <code>{editingConnector.config?.ae_title || 'HEALTH_CONNECT'}</code>.
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

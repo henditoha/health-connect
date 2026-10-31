@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Plus, TerminalSquare, ChevronDown, ChevronRight, Menu, LayoutDashboard, GitMerge, KeyRound, Users as UsersIcon, LogOut, ArrowUpRight, Layers, ShieldCheck, HeartPulse, Network, Award, Copy, Check } from './icons';
+import { ArrowLeft, Save, Plus, TerminalSquare, ChevronDown, ChevronRight, Menu, LayoutDashboard, GitMerge, KeyRound, Users as UsersIcon, LogOut, ArrowUpRight, Layers, ShieldCheck, HeartPulse, Network, Award, Copy, Check, Scan } from './icons';
 import ChannelEditor from './ChannelEditor';
 import ConnectorsView from './ConnectorsView';
+import DicomWorklistView from './DicomWorklistView';
 import faviconLogo from '../assets/favicon.ico';
 
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3001/api' : '/api';
@@ -1983,6 +1984,7 @@ function App() {
     if (activeTab === 'dashboard') return renderDashboard();
     if (activeTab === 'integrations') return renderIntegrations();
     if (activeTab === 'connectors') return <ConnectorsView apiBase={API_BASE} />;
+    if (activeTab === 'dicom') return <DicomWorklistView />;
     if (activeTab === 'license') return renderLicenseView();
     if (activeTab === 'users') return renderUsersView();
     if (activeTab === 'environments') return renderVariablesView();
@@ -2023,6 +2025,9 @@ function App() {
           </button>
           <button className={(!editingRoute && activeTab === 'connectors') ? 'active' : ''} onClick={() => navigateToTab('connectors')}>
             <Network size={16} /> Connectors
+          </button>
+          <button className={(!editingRoute && activeTab === 'dicom') ? 'active' : ''} onClick={() => navigateToTab('dicom')}>
+            <Scan size={16} /> DICOM MWL
           </button>
           <button className={(!editingRoute && activeTab === 'environments') ? 'active' : ''} onClick={() => navigateToTab('environments')}>
             <KeyRound size={16} /> Environments

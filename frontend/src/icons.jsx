@@ -55,5 +55,7 @@ export const Copy = makeIcon('Copy', <><rect width="14" height="14" x="8" y="8" 
 export const Check = makeIcon('Check', <polyline points="20 6 9 17 4 12" />);
 export const Edit2 = makeIcon('Edit2', <><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" /></>);
 export const X = makeIcon('X', <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>);
+export const Scan = makeIcon('Scan', <><path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" /><path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" /><circle cx="12" cy="12" r="3" /></>);
+export const Server = makeIcon('Server', <><rect width="20" height="8" x="2" y="2" rx="2" ry="2" /><rect width="20" height="8" x="2" y="14" rx="2" ry="2" /><line x1="6" x2="6.01" y1="6" y2="6" /><line x1="6" x2="6.01" y1="18" y2="18" /></>);
 
 

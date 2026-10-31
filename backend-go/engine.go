@@ -273,6 +273,54 @@ func (e *IntegrationEngine) runTransformerScript(script, inputData, inTpl, outTp
 		return res
 	})
 
+	vm.Set("dbExec", func(driver string, dsn string, query string) string {
+		res, err := dbExecHelper(driver, dsn, query)
+		if err != nil {
+			panic(vm.ToValue("DB Exec error: " + err.Error()))
+		}
+		return res
+	})
+
+	vm.Set("saveWorklist", func(orderData string) bool {
+		var item DicomWorklistItem
+		if err := json.Unmarshal([]byte(orderData), &item); err != nil {
+			panic(vm.ToValue("saveWorklist JSON unmarshal error: " + err.Error()))
+		}
+		item.ApplyProcedureDescriptionCopy()
+		if err := SaveDicomWorklistItem(&item); err != nil {
+			panic(vm.ToValue("saveWorklist database error: " + err.Error()))
+		}
+		return true
+	})
+
+	// Comprehensive HL7 v2 Parser and ACK utilities in JavaScript runtime
+	hl7Obj := vm.NewObject()
+	hl7Obj.Set("isHL7", func(val string) bool {
+		return IsHL7Payload(val)
+	})
+	hl7Obj.Set("parse", func(val string) goja.Value {
+		msg := ParseHL7(val)
+		b, _ := json.Marshal(msg)
+		var out interface{}
+		_ = json.Unmarshal(b, &out)
+		return vm.ToValue(out)
+	})
+	hl7Obj.Set("toOrderJSON", func(val string) string {
+		orderJSON, err := ConvertHL7ToOrderJSON(val)
+		if err != nil {
+			panic(vm.ToValue("HL7 toOrderJSON error: " + err.Error()))
+		}
+		return orderJSON
+	})
+	hl7Obj.Set("buildACK", func(val string, ackCode string, text string) string {
+		_, msh, _ := ParseHL7ORMMessage(val)
+		if msh == nil {
+			msh = &HL7MSHInfo{}
+		}
+		return BuildHL7ACK(*msh, ackCode, text)
+	})
+	vm.Set("hl7", hl7Obj)
+
 	wrapped := fmt.Sprintf(`(function() { %s })()`, script)
 	val, err := vm.RunString(wrapped)
 	if err != nil {
@@ -400,6 +448,29 @@ func dbQueryHelper(driver, dsn, query string) (string, error) {
 		return "", err
 	}
 	return string(b), nil
+}
+
+func dbExecHelper(driver, dsn, query string) (string, error) {
+	if driver == "iris" { driver = "odbc" }
+	if driver == "mariadb" { driver = "mysql" }
+	var dbConn *sql.DB
+	var err error
+	if driver == "sqlite" && (dsn == "middleware.db" || dsn == "") {
+		dbConn = db
+	} else {
+		dbConn, err = sql.Open(driver, dsn)
+		if err != nil {
+			return "", err
+		}
+		defer dbConn.Close()
+	}
+
+	res, err := dbConn.Exec(query)
+	if err != nil {
+		return "", err
+	}
+	ra, _ := res.RowsAffected()
+	return fmt.Sprintf("Rows affected: %d", ra), nil
 }
 
 func scanQueryRows(rows *sql.Rows, cols []string) []map[string]interface{} {
@@ -544,6 +615,7 @@ func (e *IntegrationEngine) handleTCPConnection(routeID string, conn net.Conn, c
 		inputData := string(buf[:n])
 		
 		isMllp, parsedData := parseMLLP(inputData)
+		isHL7 := IsHL7Payload(parsedData)
 
 		sendResponse := func(msg string) {
 			if isMllp {
@@ -554,14 +626,38 @@ func (e *IntegrationEngine) handleTCPConnection(routeID string, conn net.Conn, c
 		}
 
 		if ackBehavior == "immediate" {
-			sendResponse("ACK\r")
+			if isHL7 {
+				_, msh, _ := ParseHL7ORMMessage(parsedData)
+				if msh == nil {
+					msh = &HL7MSHInfo{}
+				}
+				sendResponse(BuildHL7ACK(*msh, "AA", "Enqueued successfully"))
+			} else {
+				sendResponse("ACK\r")
+			}
 			e.EnqueueMessage(routeID, parsedData)
 		} else {
-			success, resp, _ := e.ExecuteRoute(routeID, parsedData)
-			if success {
-				sendResponse(resp)
+			success, resp, err := e.ExecuteRoute(routeID, parsedData)
+			if isHL7 {
+				_, msh, _ := ParseHL7ORMMessage(parsedData)
+				if msh == nil {
+					msh = &HL7MSHInfo{}
+				}
+				if success {
+					sendResponse(BuildHL7ACK(*msh, "AA", "Order accepted and scheduled in SQL"))
+				} else {
+					errMsg := "Failed to process order"
+					if err != nil {
+						errMsg = err.Error()
+					}
+					sendResponse(BuildHL7ACK(*msh, "AE", errMsg))
+				}
 			} else {
-				sendResponse("ERR\r")
+				if success {
+					sendResponse(resp)
+				} else {
+					sendResponse("ERR\r")
+				}
 			}
 		}
 	}
@@ -786,9 +882,113 @@ func (e *IntegrationEngine) dispatchTargetProtocol(tgt Endpoint, targetCfg map[s
 		return "Enqueued to Route ID: " + targetRouteID, nil
 	case "tcp":
 		return e.dispatchTCP(targetCfg, &tgt, destPayload, route)
+	case "dicom":
+		return e.dispatchDICOM(targetCfg, destPayload, route)
+	case "database", "sql":
+		return e.dispatchDatabase(targetCfg, destPayload, route)
 	default:
 		return "", fmt.Errorf("Unsupported protocol: %s", tgt.Protocol)
 	}
+}
+
+func (e *IntegrationEngine) dispatchDICOM(targetCfg map[string]interface{}, payload string, route Route) (string, error) {
+	trimmed := strings.TrimSpace(payload)
+	var item *DicomWorklistItem
+
+	if IsHL7Payload(trimmed) {
+		var err error
+		item, _, err = ParseHL7ORMMessage(trimmed)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse HL7 ORM: %w", err)
+		}
+	} else {
+		var p IngressOrderPayload
+		if err := json.Unmarshal([]byte(payload), &p); err != nil {
+			p = IngressOrderPayload{
+				AccessionNumber: "ACC" + time.Now().Format("20060102150405"),
+				PatientID:       "RM-AUTO",
+				PatientName:     "PASIEN",
+				Modality:        "DX",
+				ProcedureDesc:   payload,
+			}
+		}
+
+		acc := firstNonEmpty(p.AccessionNumber, p.AccessionNo, p.NoOrder, p.OrderNo, "ACC"+time.Now().Format("20060102150405"))
+		patID := firstNonEmpty(p.PatientID, p.NoRM, p.Norm, p.MRN, "RM-AUTO")
+		patName := firstNonEmpty(p.PatientName, p.NamaPasien, p.Nama, "ANONYMOUS")
+		modality := strings.ToUpper(strings.TrimSpace(firstNonEmpty(p.Modality, p.Modalitas, "DX")))
+		procDesc := firstNonEmpty(p.ProcedureDesc, p.ProcedureName, p.NamaTindakan, p.Tindakan, p.StudyDesc, p.ReqProcDesc, "Pemeriksaan Radiologi")
+		birth := firstNonEmpty(p.BirthDate, p.TglLahir, p.TanggalLahir)
+		gender := firstNonEmpty(p.Gender, p.JenisKelamin, p.Sex, "O")
+		schDate := firstNonEmpty(p.ScheduledDate, p.TglPeriksa, p.TanggalPeriksa, time.Now().Format("20060102"))
+		schTime := firstNonEmpty(p.ScheduledTime, p.JamPeriksa, time.Now().Format("150405"))
+		station := firstNonEmpty(p.StationAETitle, p.AETitle, "*")
+		physician := firstNonEmpty(p.PhysicianName, p.DokterPengirim, p.Dokter, "")
+
+		item = &DicomWorklistItem{
+			AccessionNumber: acc,
+			PatientID:       patID,
+			PatientName:     patName,
+			BirthDate:       birth,
+			Gender:          gender,
+			Modality:        modality,
+			ProcedureDesc:   procDesc,
+			StudyDesc:       p.StudyDesc,
+			ReqProcDesc:     p.ReqProcDesc,
+			SeriesDesc:      p.SeriesDesc,
+			StationAETitle:  station,
+			PhysicianName:   physician,
+			ScheduledDate:   schDate,
+			ScheduledTime:   schTime,
+			Status:          "SCHEDULED",
+			RawPayload:      payload,
+		}
+	}
+
+	item.ApplyProcedureDescriptionCopy()
+
+	if err := SaveDicomWorklistItem(item); err != nil {
+		return "", fmt.Errorf("failed to save to DICOM worklist (SQL): %w", err)
+	}
+
+	return fmt.Sprintf("Saved to DICOM Worklist (SQL): Accession=%s, Patient=%s, Modality=%s, Procedure=%s", item.AccessionNumber, item.PatientName, item.Modality, item.ProcedureDesc), nil
+}
+
+func (e *IntegrationEngine) dispatchDatabase(targetCfg map[string]interface{}, payload string, route Route) (string, error) {
+	driver, _ := targetCfg["driver"].(string)
+	if driver == "" {
+		driver = "sqlite"
+	}
+	dsn, _ := targetCfg["dsn"].(string)
+	if dsn == "" {
+		dsn = "middleware.db"
+	}
+
+	query, _ := targetCfg["query"].(string)
+	if strings.TrimSpace(query) == "" {
+		return e.dispatchDICOM(targetCfg, payload, route)
+	}
+
+	query = e.interpolateVariables(query, route)
+
+	var dbConn *sql.DB
+	var err error
+	if driver == "sqlite" && (dsn == "middleware.db" || dsn == "") {
+		dbConn = db
+	} else {
+		dbConn, err = sql.Open(driver, dsn)
+		if err != nil {
+			return "", fmt.Errorf("database connection error: %w", err)
+		}
+		defer dbConn.Close()
+	}
+
+	res, err := dbConn.Exec(query, payload)
+	if err != nil {
+		return "", fmt.Errorf("database query error: %w", err)
+	}
+	ra, _ := res.RowsAffected()
+	return fmt.Sprintf("SQL executed successfully (%d rows affected)", ra), nil
 }
 
 func (e *IntegrationEngine) dispatchHTTP(targetCfg map[string]interface{}, payload string, route Route) (string, error) {

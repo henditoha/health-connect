@@ -1,0 +1,37 @@
+{
+  "id": "orm-pacs-gateway",
+  "name": "Radiology Order & PACS Gateway (HL7 / JSON to SQL)",
+  "description": "Menerima order radiologi dari SIMRS (JSON) maupun Mirth Connect / TrakCare (HL7 ORM-001) via HTTP & TCP, otomatis transformasi, dan simpan ke basis data SQL (dicom_worklist_items) dalam format JSON",
+  "group_name": "RADIOLOGY & PACS",
+  "active": true,
+  "variables": {
+    "TCP_PORT": "6001",
+    "HTTP_PATH": "/ingress/radiology-orders"
+  },
+  "endpoints": [
+    {
+      "id": "ep-radiology-src",
+      "route_id": "orm-pacs-gateway",
+      "role": "source",
+      "protocol": "tcp",
+      "format": "auto",
+      "config": "{\"port\":\"6001\",\"path\":\"/ingress/radiology-orders\",\"ackBehavior\":\"deferred\",\"filter_script\":\"\",\"transformer_script\":\"\"}"
+    },
+    {
+      "id": "ep-radiology-tgt",
+      "route_id": "orm-pacs-gateway",
+      "role": "target",
+      "protocol": "dicom",
+      "format": "dicom",
+      "config": "{\"name\":\"DICOM Modality Worklist (SQL)\",\"enabled\":true,\"filter_script\":\"\",\"transformer_script\":\"\"}"
+    }
+  ],
+  "transformer": {
+    "id": "tr-radiology",
+    "route_id": "orm-pacs-gateway",
+    "source_script": "",
+    "script": "// ============================================================================\n// UNIVERSAL RADIOLOGY ORDER TRANSFORMER (JSON & HL7 v2 ORM)\n// Accepts both JSON payloads from SIMRS and HL7 v2 (ORM^O01) from Mirth/TrakCare\n// Saves to SQL dicom_worklist_items and guarantees Procedure Description auto-copy\n// ============================================================================\n\nvar data;\n\n// 1. Detect if inbound payload is HL7 v2 (starts with MSH) or JSON\nif (typeof input === \"string\" && input.trim().startsWith(\"MSH\")) {\n    // Parse HL7 ORM into standardized order JSON\n    data = JSON.parse(hl7.toOrderJSON(input));\n} else {\n    // Parse incoming JSON from SIMRS\n    data = typeof input === \"string\" ? JSON.parse(input) : input;\n}\n\n// 2. Ensure Procedure Description is copied across all description attributes\nvar procDesc = data.procedure_desc || data.procedure_name || data.nama_tindakan || data.study_desc || \"Pemeriksaan Radiologi\";\ndata.procedure_desc = procDesc;\ndata.study_desc = procDesc;\ndata.req_proc_desc = procDesc;\ndata.series_desc = procDesc;\n\n// 3. Normalize Date & Time\nif (!data.scheduled_date && !data.tgl_periksa) {\n    var now = new Date();\n    var yyyy = now.getFullYear();\n    var mm = String(now.getMonth() + 1).padStart(2, '0');\n    var dd = String(now.getDate()).padStart(2, '0');\n    data.scheduled_date = yyyy + mm + dd;\n}\n\n// 4. Return clean JSON representation for SQL persistence\nreturn JSON.stringify(data);",
+    "inbound_template": "{}",
+    "outbound_template": "{}"
+  }
+}

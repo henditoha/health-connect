@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Save, Play, Filter, Trash2, Plus, Eye, EyeOff } from './icons';
+import DatabaseConfigForm from './DatabaseConfigForm';
 
 function VariablesEditor({
   title,
@@ -434,6 +435,7 @@ export default function ChannelEditor({
                     { code: 'http', name: 'HTTP POST Ingress' },
                     { code: 'http-poll', name: 'HTTP GET Poll' },
                     { code: 'tcp', name: 'TCP Server' },
+                    { code: 'dicom', name: 'DICOM (MWL / PACS)' },
                     { code: 'database', name: 'Database Poll' },
                     { code: 'internal', name: 'Internal Queue Reader' }
                   ]).map(p => (
@@ -454,6 +456,7 @@ export default function ChannelEditor({
                     { code: 'xml', name: 'XML' },
                     { code: 'hl7', name: 'HL7 v2' },
                     { code: 'fhir', name: 'FHIR' },
+                    { code: 'dicom', name: 'DICOM' },
                     { code: 'raw', name: 'Raw String' }
                   ]).map(f => (
                     <option key={f.code} value={f.code}>{f.name}</option>
@@ -501,6 +504,30 @@ export default function ChannelEditor({
               </div>
             )}
 
+            {editingRoute.source.protocol === 'dicom' && (
+              <div style={{ marginTop: '0.5rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: '1rem' }}>
+                  <div className="form-group">
+                    <label htmlFor="source-dicom-port">DICOM Port</label>
+                    <input id="source-dicom-port" type="text" className="form-control" placeholder="11112"
+                      value={editingRoute.source.config?.port || '11112'}
+                      onChange={e => updateSourceConfig({ port: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="source-dicom-aet">Called AE Title</label>
+                    <input id="source-dicom-aet" type="text" className="form-control" placeholder="HEALTH_CONNECT"
+                      value={editingRoute.source.config?.ae_title || 'HEALTH_CONNECT'}
+                      onChange={e => updateSourceConfig({ ae_title: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--success)', marginTop: '4px' }}>
+                  ✓ Native DICOM DIMSE SCP aktif (C-ECHO Ping & C-FIND Modality Worklist) dengan redundansi tag tindakan.
+                </div>
+              </div>
+            )}
+
             {editingRoute.source.protocol === 'http-poll' && (
               <div style={{ marginTop: '0.5rem' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: '1rem' }}>
@@ -530,58 +557,21 @@ export default function ChannelEditor({
             )}
 
             {editingRoute.source.protocol === 'database' && (
-              <div style={{ marginTop: '0.5rem' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '150px 220px 1fr', gap: '1rem' }}>
-                  <div className="form-group">
-                    <label htmlFor="source-db-interval">Interval (sec)</label>
-                    <input id="source-db-interval" type="number" className="form-control" placeholder="60" min="1"
-                      value={editingRoute.source.config?.pollInterval || ''}
-                      onChange={e => updateSourceConfig({ pollInterval: e.target.value })}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="source-db-driver">Database Driver</label>
-                    <select id="source-db-driver" className="form-control"
-                      value={editingRoute.source.config?.driver || 'mysql'}
-                      onChange={e => updateSourceConfig({ driver: e.target.value })}
-                    >
-                      {(registry.database_drivers.length > 0 ? registry.database_drivers : [
-                        { code: 'mysql', name: 'MySQL' },
-                        { code: 'mariadb', name: 'MariaDB' },
-                        { code: 'postgres', name: 'PostgreSQL' },
-                        { code: 'sqlserver', name: 'SQL Server (MSSQL)' },
-                        { code: 'sqlite', name: 'SQLite' },
-                        { code: 'hdb', name: 'SAP HANA' },
-                        { code: 'odbc', name: 'ODBC (Generic)' }
-                      ]).map(d => (
-                        <option key={d.code} value={d.code}>{d.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="source-db-dsn">Connection String (DSN)</label>
-                    <input id="source-db-dsn" type="text" className="form-control" placeholder="user:pass@tcp(localhost:3306)/dbname or postgres://user:pass@host/db"
-                      value={editingRoute.source.config?.dsn || ''}
-                      onChange={e => updateSourceConfig({ dsn: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div className="form-group">
-                    <label htmlFor="source-db-query">Select Query (Poller)</label>
-                    <textarea id="source-db-query" className="form-control" rows="2" placeholder="SELECT id, patient_id FROM orders WHERE status='new'"
-                      value={editingRoute.source.config?.query || ''}
-                      onChange={e => updateSourceConfig({ query: e.target.value })}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="source-db-post-query">Post-Process Update Query</label>
-                    <textarea id="source-db-post-query" className="form-control" rows="2" placeholder="UPDATE orders SET status='processed' WHERE status='new'"
-                      value={editingRoute.source.config?.postQuery || ''}
-                      onChange={e => updateSourceConfig({ postQuery: e.target.value })}
-                    />
-                  </div>
-                </div>
+              <div style={{ marginTop: '0.75rem', padding: '1rem', backgroundColor: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                <DatabaseConfigForm
+                  driver={editingRoute.source.config?.driver || 'postgres'}
+                  dsn={editingRoute.source.config?.dsn || ''}
+                  onChangeDriver={newDriver => updateSourceConfig({ driver: newDriver })}
+                  onChangeDsn={newDsn => updateSourceConfig({ dsn: newDsn })}
+                  pollInterval={editingRoute.source.config?.pollInterval || '60'}
+                  onChangePollInterval={val => updateSourceConfig({ pollInterval: val })}
+                  query={editingRoute.source.config?.query || ''}
+                  onChangeQuery={val => updateSourceConfig({ query: val })}
+                  postQuery={editingRoute.source.config?.postQuery || ''}
+                  onChangePostQuery={val => updateSourceConfig({ postQuery: val })}
+                  showPollerFields={true}
+                  isTarget={false}
+                />
               </div>
             )}
           </div>
@@ -781,6 +771,7 @@ export default function ChannelEditor({
                 >
                   <option value="http">HTTP POST</option>
                   <option value="tcp">TCP Client</option>
+                  <option value="dicom">DICOM (MWL / PACS)</option>
                   <option value="database">Database Insert / Query</option>
                   <option value="internal-channel">Forward to Another Channel</option>
                 </select>
@@ -799,6 +790,7 @@ export default function ChannelEditor({
                       { code: 'xml', name: 'XML' },
                       { code: 'hl7', name: 'HL7 v2' },
                       { code: 'fhir', name: 'FHIR' },
+                      { code: 'dicom', name: 'DICOM' },
                       { code: 'raw', name: 'Raw String' }
                     ]).map(f => (
                       <option key={f.code} value={f.code}>{f.name}</option>
@@ -808,7 +800,22 @@ export default function ChannelEditor({
               )}
             </div>
 
-            {activeDest.protocol !== 'internal-channel' && (
+            {activeDest.protocol === 'database' && (
+              <div style={{ marginTop: '0.75rem', padding: '1rem', backgroundColor: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                <DatabaseConfigForm
+                  driver={activeDest.config?.driver || 'postgres'}
+                  dsn={activeDest.config?.dsn || ''}
+                  onChangeDriver={newDriver => updateActiveDestConfig({ driver: newDriver })}
+                  onChangeDsn={newDsn => updateActiveDestConfig({ dsn: newDsn })}
+                  query={activeDest.config?.query || ''}
+                  onChangeQuery={val => updateActiveDestConfig({ query: val })}
+                  showPollerFields={true}
+                  isTarget={true}
+                />
+              </div>
+            )}
+
+            {activeDest.protocol !== 'internal-channel' && activeDest.protocol !== 'database' && (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 120px 2fr', gap: '1rem' }}>
                   <div className="form-group">
@@ -834,7 +841,22 @@ export default function ChannelEditor({
                       />
                     </div>
                   )}
+                  {activeDest.protocol === 'dicom' && (
+                    <div className="form-group">
+                      <label htmlFor={`dest-aet-${activeDestIdx}`}>Called AE Title (Target)</label>
+                      <input id={`dest-aet-${activeDestIdx}`} type="text" className="form-control" placeholder="e.g. HEALTH_CONNECT or PACS_SERVER"
+                        value={activeDest.config?.called_aet || 'HEALTH_CONNECT'}
+                        onChange={e => updateActiveDestConfig({ called_aet: e.target.value })}
+                      />
+                    </div>
+                  )}
                 </div>
+
+                {activeDest.protocol === 'dicom' && (
+                  <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: '#0284c7' }}>
+                    ℹ️ Payload pemeriksaan dari channel ini akan otomatis disimpan ke antrean <strong>DICOM Modality Worklist (MWL)</strong> lokal dengan redundansi ke Study Description, Req Proc Description, dan Series Description.
+                  </div>
+                )}
 
                 {activeDest.protocol === 'http' && (
                   <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: '1rem' }}>
