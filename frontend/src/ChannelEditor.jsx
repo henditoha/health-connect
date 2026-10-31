@@ -820,14 +820,16 @@ export default function ChannelEditor({
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 120px 2fr', gap: '1rem' }}>
                   <div className="form-group">
                     <label htmlFor={`dest-host-${activeDestIdx}`}>Host / IP Address</label>
-                    <input id={`dest-host-${activeDestIdx}`} type="text" className="form-control" placeholder="e.g. https://api-satusehat-stg.dto.kemkes.go.id or 192.168.1.100"
+                    <input id={`dest-host-${activeDestIdx}`} type="text" className="form-control"
+                      placeholder={activeDest.protocol === 'dicom' ? '127.0.0.1 (Local MWL) atau IP PACS' : 'e.g. https://api-satusehat-stg.dto.kemkes.go.id or 192.168.1.100'}
                       value={activeDest.config?.host || ''}
                       onChange={e => updateActiveDestConfig({ host: e.target.value })}
                     />
                   </div>
                   <div className="form-group">
                     <label htmlFor={`dest-port-${activeDestIdx}`}>Port</label>
-                    <input id={`dest-port-${activeDestIdx}`} type="text" className="form-control" placeholder="e.g. 8080"
+                    <input id={`dest-port-${activeDestIdx}`} type="text" className="form-control"
+                      placeholder={activeDest.protocol === 'dicom' ? '11112' : 'e.g. 8080'}
                       value={activeDest.config?.port || ''}
                       onChange={e => updateActiveDestConfig({ port: e.target.value })}
                     />
