@@ -119,6 +119,8 @@ function VariablesEditor({
   );
 }
 
+const API_BASE = import.meta.env.DEV ? 'http://localhost:3001/api' : '/api';
+
 export default function ChannelEditor({
   editingRoute,
   setEditingRoute,
@@ -131,6 +133,59 @@ export default function ChannelEditor({
   isDirty = false
 }) {
   const [visibleVars, setVisibleVars] = useState({});
+  const [registry, setRegistry] = useState({ protocols: [], database_drivers: [], formats: [] });
+  const [savedConnectors, setSavedConnectors] = useState([]);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/connector-registry`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.protocols) setRegistry(data);
+      })
+      .catch(() => {});
+
+    fetch(`${API_BASE}/connectors`)
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setSavedConnectors(data);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSaveAsConnector = async (role) => {
+    const isSource = role === 'source';
+    const defaultName = isSource ? `${editingRoute.name} Source` : (activeDest.config?.name || `${editingRoute.name} Target`);
+    const connName = prompt(`Enter a name for this reusable ${isSource ? 'source' : 'target'} connector profile:`, defaultName);
+    if (!connName) return;
+
+    const payload = {
+      name: connName,
+      role: isSource ? 'source' : 'target',
+      protocol: isSource ? editingRoute.source.protocol : activeDest.protocol,
+      format: isSource ? editingRoute.source.format : activeDest.format,
+      config: isSource ? (editingRoute.source.config || {}) : (activeDest.config || {}),
+      description: `Saved from channel: ${editingRoute.name}`
+    };
+
+    try {
+      const res = await fetch(`${API_BASE}/connectors`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        alert(`Connector profile "${connName}" saved successfully!`);
+        fetch(`${API_BASE}/connectors`)
+          .then(r => r.json())
+          .then(data => { if (Array.isArray(data)) setSavedConnectors(data); });
+      } else {
+        const err = await res.json();
+        alert('Failed: ' + (err.error || 'Unknown error'));
+      }
+    } catch (err) {
+      alert('Network error: ' + err.message);
+    }
+  };
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -327,6 +382,45 @@ export default function ChannelEditor({
               </div>
             </div>
 
+            {/* Reusable Connector Loader Bar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', padding: '0.6rem 0.9rem', backgroundColor: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, maxWidth: '480px' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--primary)', whiteSpace: 'nowrap' }}>⚡ Saved Connector:</span>
+                <select
+                  className="form-control"
+                  style={{ padding: '0.35rem 0.6rem', fontSize: '0.85rem' }}
+                  onChange={(e) => {
+                    const conn = savedConnectors.find(c => c.id === e.target.value);
+                    if (conn) {
+                      setEditingRoute({
+                        ...editingRoute,
+                        source: {
+                          ...editingRoute.source,
+                          protocol: conn.protocol,
+                          format: conn.format || editingRoute.source.format,
+                          config: { ...(editingRoute.source.config || {}), ...(conn.config || {}) }
+                        }
+                      });
+                    }
+                  }}
+                  defaultValue=""
+                >
+                  <option value="">-- Load from Reusable Connector Profile --</option>
+                  {savedConnectors.filter(c => c.role === 'source' || c.role === 'shared').map(c => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.protocol?.toUpperCase()})</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                onClick={() => handleSaveAsConnector('source')}
+              >
+                💾 Save as Profile
+              </button>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
               <div className="form-group">
                 <label htmlFor="source-protocol">Protocol / Method</label>
@@ -336,11 +430,15 @@ export default function ChannelEditor({
                   value={editingRoute.source.protocol}
                   onChange={e => setEditingRoute({ ...editingRoute, source: { ...editingRoute.source, protocol: e.target.value } })}
                 >
-                  <option value="http">HTTP POST Ingress</option>
-                  <option value="http-poll">HTTP GET Poll</option>
-                  <option value="tcp">TCP Server</option>
-                  <option value="database">Database Poll</option>
-                  <option value="internal">Internal Queue Reader (Triggered by another channel)</option>
+                  {(registry.protocols.length > 0 ? registry.protocols : [
+                    { code: 'http', name: 'HTTP POST Ingress' },
+                    { code: 'http-poll', name: 'HTTP GET Poll' },
+                    { code: 'tcp', name: 'TCP Server' },
+                    { code: 'database', name: 'Database Poll' },
+                    { code: 'internal', name: 'Internal Queue Reader' }
+                  ]).map(p => (
+                    <option key={p.code} value={p.code}>{p.name}</option>
+                  ))}
                 </select>
               </div>
               <div className="form-group">
@@ -351,11 +449,15 @@ export default function ChannelEditor({
                   value={editingRoute.source.format}
                   onChange={e => setEditingRoute({ ...editingRoute, source: { ...editingRoute.source, format: e.target.value } })}
                 >
-                  <option value="json">JSON</option>
-                  <option value="xml">XML</option>
-                  <option value="hl7">HL7 v2</option>
-                  <option value="fhir">FHIR</option>
-                  <option value="raw">Raw String</option>
+                  {(registry.formats.length > 0 ? registry.formats : [
+                    { code: 'json', name: 'JSON' },
+                    { code: 'xml', name: 'XML' },
+                    { code: 'hl7', name: 'HL7 v2' },
+                    { code: 'fhir', name: 'FHIR' },
+                    { code: 'raw', name: 'Raw String' }
+                  ]).map(f => (
+                    <option key={f.code} value={f.code}>{f.name}</option>
+                  ))}
                 </select>
               </div>
               <div className="form-group">
@@ -443,13 +545,17 @@ export default function ChannelEditor({
                       value={editingRoute.source.config?.driver || 'mysql'}
                       onChange={e => updateSourceConfig({ driver: e.target.value })}
                     >
-                      <option value="mysql">MySQL</option>
-                      <option value="mariadb">MariaDB</option>
-                      <option value="postgres">PostgreSQL</option>
-                      <option value="sqlserver">SQL Server (MSSQL)</option>
-                      <option value="sqlite">SQLite</option>
-                      <option value="hdb">SAP HANA</option>
-                      <option value="odbc">ODBC (Generic)</option>
+                      {(registry.database_drivers.length > 0 ? registry.database_drivers : [
+                        { code: 'mysql', name: 'MySQL' },
+                        { code: 'mariadb', name: 'MariaDB' },
+                        { code: 'postgres', name: 'PostgreSQL' },
+                        { code: 'sqlserver', name: 'SQL Server (MSSQL)' },
+                        { code: 'sqlite', name: 'SQLite' },
+                        { code: 'hdb', name: 'SAP HANA' },
+                        { code: 'odbc', name: 'ODBC (Generic)' }
+                      ]).map(d => (
+                        <option key={d.code} value={d.code}>{d.name}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="form-group">
@@ -623,6 +729,46 @@ export default function ChannelEditor({
               </div>
             </div>
 
+            {/* Reusable Destination Connector Loader Bar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', padding: '0.6rem 0.9rem', backgroundColor: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, maxWidth: '480px' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--primary)', whiteSpace: 'nowrap' }}>⚡ Saved Connector:</span>
+                <select
+                  className="form-control"
+                  style={{ padding: '0.35rem 0.6rem', fontSize: '0.85rem' }}
+                  onChange={(e) => {
+                    const conn = savedConnectors.find(c => c.id === e.target.value);
+                    if (conn) {
+                      updateActiveDest(curr => ({
+                        ...curr,
+                        protocol: conn.protocol,
+                        format: conn.format || curr.format,
+                        config: {
+                          ...(curr.config || {}),
+                          ...(conn.config || {}),
+                          name: conn.name || curr.config?.name
+                        }
+                      }));
+                    }
+                  }}
+                  defaultValue=""
+                >
+                  <option value="">-- Load from Reusable Connector Profile --</option>
+                  {savedConnectors.filter(c => c.role === 'target' || c.role === 'shared').map(c => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.protocol?.toUpperCase()})</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+                onClick={() => handleSaveAsConnector('target')}
+              >
+                💾 Save as Profile
+              </button>
+            </div>
+
             {/* Destination Protocol Settings */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
               <div className="form-group">
@@ -635,7 +781,7 @@ export default function ChannelEditor({
                 >
                   <option value="http">HTTP POST</option>
                   <option value="tcp">TCP Client</option>
-                  <option value="database">Database Insert</option>
+                  <option value="database">Database Insert / Query</option>
                   <option value="internal-channel">Forward to Another Channel</option>
                 </select>
               </div>
@@ -648,10 +794,15 @@ export default function ChannelEditor({
                     value={activeDest.format}
                     onChange={e => updateActiveDest(curr => ({ ...curr, format: e.target.value }))}
                   >
-                    <option value="json">JSON</option>
-                    <option value="xml">XML</option>
-                    <option value="hl7">HL7 v2</option>
-                    <option value="fhir">FHIR</option>
+                    {(registry.formats.length > 0 ? registry.formats : [
+                      { code: 'json', name: 'JSON' },
+                      { code: 'xml', name: 'XML' },
+                      { code: 'hl7', name: 'HL7 v2' },
+                      { code: 'fhir', name: 'FHIR' },
+                      { code: 'raw', name: 'Raw String' }
+                    ]).map(f => (
+                      <option key={f.code} value={f.code}>{f.name}</option>
+                    ))}
                   </select>
                 </div>
               )}

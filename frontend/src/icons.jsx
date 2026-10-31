@@ -53,5 +53,7 @@ export const Network = makeIcon('Network', <><rect x="16" y="16" width="6" heigh
 export const Award = makeIcon('Award', <><circle cx="12" cy="8" r="6" /><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11" /></>);
 export const Copy = makeIcon('Copy', <><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></>);
 export const Check = makeIcon('Check', <polyline points="20 6 9 17 4 12" />);
+export const Edit2 = makeIcon('Edit2', <><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" /></>);
+export const X = makeIcon('X', <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>);
 
 

@@ -103,6 +103,20 @@ func main() {
 		api.GET("/license", getLicenseInfo)
 		api.POST("/license/activate", activateLicense)
 
+		// Dynamic Connector Types & Driver Registry
+		api.GET("/connector-registry", getConnectorRegistry)
+		api.POST("/connector-registry", createConnectorType)
+		api.PUT("/connector-registry/:id", updateConnectorType)
+		api.DELETE("/connector-registry/:id", deleteConnectorType)
+
+		// Reusable Connectors (Connection Profiles)
+		api.GET("/connectors", getConnectors)
+		api.POST("/connectors", createConnector)
+		api.GET("/connectors/:id", getConnector)
+		api.PUT("/connectors/:id", updateConnector)
+		api.DELETE("/connectors/:id", deleteConnector)
+		api.POST("/connectors/:id/test", testConnectorProfile)
+
 		api.POST("/login", login)
 		api.GET("/users", getUsers)
 		api.POST("/users", createUser)

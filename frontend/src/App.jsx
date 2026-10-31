@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Save, Plus, TerminalSquare, ChevronDown, ChevronRight, Menu, LayoutDashboard, GitMerge, KeyRound, Users as UsersIcon, LogOut, ArrowUpRight, Layers, ShieldCheck, HeartPulse, Network, Award, Copy, Check } from './icons';
 import ChannelEditor from './ChannelEditor';
+import ConnectorsView from './ConnectorsView';
 import faviconLogo from '../assets/favicon.ico';
 
 const API_BASE = import.meta.env.DEV ? 'http://localhost:3001/api' : '/api';
@@ -1981,6 +1982,7 @@ function App() {
     if (loading) return <p>Loading...</p>;
     if (activeTab === 'dashboard') return renderDashboard();
     if (activeTab === 'integrations') return renderIntegrations();
+    if (activeTab === 'connectors') return <ConnectorsView apiBase={API_BASE} />;
     if (activeTab === 'license') return renderLicenseView();
     if (activeTab === 'users') return renderUsersView();
     if (activeTab === 'environments') return renderVariablesView();
@@ -2018,6 +2020,9 @@ function App() {
           </button>
           <button className={(editingRoute || activeTab === 'integrations') ? 'active' : ''} onClick={() => navigateToTab('integrations')}>
             <GitMerge size={16} /> Channels
+          </button>
+          <button className={(!editingRoute && activeTab === 'connectors') ? 'active' : ''} onClick={() => navigateToTab('connectors')}>
+            <Network size={16} /> Connectors
           </button>
           <button className={(!editingRoute && activeTab === 'environments') ? 'active' : ''} onClick={() => navigateToTab('environments')}>
             <KeyRound size={16} /> Environments
@@ -2079,7 +2084,7 @@ function App() {
                   <Menu size={24} color="var(--primary)" />
                 </button>
                 <h1 className="page-title">
-                  {{ 'integrations': 'Channels', 'logs': 'Message Logs', 'users': 'Users', 'environments': 'Global Environments', 'license': 'License & Machine Management' }[activeTab] || 'Dashboard'}
+                  {{ 'integrations': 'Channels', 'connectors': 'Connectors & Protocols', 'logs': 'Message Logs', 'users': 'Users', 'environments': 'Global Environments', 'license': 'License & Machine Management' }[activeTab] || 'Dashboard'}
                 </h1>
               </div>
             </div>

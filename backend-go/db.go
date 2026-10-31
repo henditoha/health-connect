@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -126,6 +127,26 @@ func initDb() error {
 			next_retry_at %s,
 			created_at %s
 		)`, varchar, varchar, varchar, varchar, varchar),
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS connector_types (
+			id %s PRIMARY KEY,
+			category %s,
+			code %s UNIQUE,
+			name %s,
+			description TEXT,
+			sample_config TEXT,
+			active BOOLEAN DEFAULT 1
+		)`, varchar, varchar, varchar, varchar),
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS connectors (
+			id %s PRIMARY KEY,
+			name %s,
+			role %s,
+			protocol %s,
+			format %s,
+			config TEXT,
+			description TEXT,
+			created_at %s,
+			updated_at %s
+		)`, varchar, varchar, varchar, varchar, varchar, varchar, varchar),
 	}
 
 	for _, q := range queries {
@@ -146,6 +167,8 @@ func initDb() error {
 		"CREATE INDEX IF NOT EXISTS idx_message_logs_route_status ON message_logs(route_id, status)",
 		"CREATE INDEX IF NOT EXISTS idx_message_logs_created_at ON message_logs(created_at)",
 		"CREATE INDEX IF NOT EXISTS idx_queue_messages_status_route ON queue_messages(status, route_id)",
+		"CREATE INDEX IF NOT EXISTS idx_connectors_role ON connectors(role)",
+		"CREATE INDEX IF NOT EXISTS idx_connector_types_category ON connector_types(category)",
 	}
 	for _, idx := range indexes {
 		if _, err := db.Exec(idx); err != nil {
@@ -163,6 +186,7 @@ func initDb() error {
 	}
 
 	seedDefaultSatusehatTemplate()
+	seedDefaultConnectorRegistry()
 
 	return nil
 }
@@ -427,6 +451,88 @@ func loadDotEnv() {
 				}
 			}
 			break
+		}
+	}
+}
+
+func seedDefaultConnectorRegistry() {
+	// 1. Seed Connector Types (Protocols, Drivers, Formats)
+	var typeCount int
+	db.QueryRow("SELECT COUNT(*) FROM connector_types").Scan(&typeCount)
+	if typeCount == 0 {
+		initialTypes := []struct {
+			id, category, code, name, desc, sample string
+		}{
+			// Protocols
+			{"proto-http", "protocol", "http", "HTTP POST Ingress", "Menerima panggilan HTTP POST dari aplikasi external", `{"path":"/ingress/:id"}`},
+			{"proto-http-poll", "protocol", "http-poll", "HTTP GET Poll", "Melakukan polling periodik via HTTP GET ke REST API", `{"url":"https://api.hospital.com/data","pollInterval":"60"}`},
+			{"proto-tcp", "protocol", "tcp", "TCP / MLLP Socket", "Membuka socket TCP untuk menerima pesan HL7 v2 MLLP", `{"port":"9000"}`},
+			{"proto-database", "protocol", "database", "Database Poller", "Melakukan polling periodik query SELECT ke basis data", `{"driver":"mysql","pollInterval":"60"}`},
+			{"proto-internal", "protocol", "internal", "Internal Queue Reader", "Menerima pesan dari antrean internal rute lain", `{}`},
+
+			// Database Drivers
+			{"driver-mysql", "database_driver", "mysql", "MySQL", "Driver native MySQL 5.7+ / 8.0+", `{"dsn":"user:password@tcp(localhost:3306)/dbname?parseTime=true"}`},
+			{"driver-mariadb", "database_driver", "mariadb", "MariaDB", "Driver kompatibel MariaDB 10.x+", `{"dsn":"user:password@tcp(localhost:3306)/dbname?parseTime=true"}`},
+			{"driver-postgres", "database_driver", "postgres", "PostgreSQL", "Driver PostgreSQL 12+", `{"dsn":"postgres://user:password@localhost:5432/dbname?sslmode=disable"}`},
+			{"driver-sqlserver", "database_driver", "sqlserver", "Microsoft SQL Server", "Driver Microsoft SQL Server 2012+", `{"dsn":"sqlserver://user:password@localhost:1433?database=dbname"}`},
+			{"driver-sqlite", "database_driver", "sqlite", "SQLite", "File basis data lokal SQLite", `{"dsn":"simrs.db"}`},
+			{"driver-hdb", "database_driver", "hdb", "SAP HANA", "Driver SAP HANA Database", `{"dsn":"hdb://user:password@localhost:39015"}`},
+			{"driver-odbc", "database_driver", "odbc", "ODBC (Generic) - IRIS, Caché, Oracle, DB2", "Konektor universal ODBC untuk InterSystems IRIS/Caché, Oracle, DB2, dll.", `{"dsn":"DSN=SIMRS_IRIS;UID=user;PWD=pass;"}`},
+
+			// Formats
+			{"fmt-json", "format", "json", "JSON", "Format data terstruktur JavaScript Object Notation", `{}`},
+			{"fmt-xml", "format", "xml", "XML", "Format dokumen Extensible Markup Language", `{}`},
+			{"fmt-hl7", "format", "hl7", "HL7 v2.x ER7", "Format pesan standar kesehatan HL7 v2 pipe-delimited", `{}`},
+			{"fmt-fhir", "format", "fhir", "HL7 FHIR R4", "Standar interoperabilitas kesehatan Fast Healthcare Interoperability Resources", `{}`},
+			{"fmt-raw", "format", "raw", "Raw String / Binary", "Teks polos atau data biner", `{}`},
+		}
+
+		for _, it := range initialTypes {
+			db.Exec("INSERT INTO connector_types (id, category, code, name, description, sample_config, active) VALUES (?, ?, ?, ?, ?, ?, 1)",
+				it.id, it.category, it.code, it.name, it.desc, it.sample)
+		}
+	}
+
+	// 2. Seed Reusable Connectors (Connection Profiles)
+	var connCount int
+	db.QueryRow("SELECT COUNT(*) FROM connectors").Scan(&connCount)
+	if connCount == 0 {
+		now := time.Now().Format("2006-01-02 15:04:05")
+		initialConnectors := []struct {
+			id, name, role, protocol, format, config, desc string
+		}{
+			{
+				id:       uuid.New().String(),
+				name:     "SATUSEHAT STG FHIR Gateway",
+				role:     "target",
+				protocol: "http",
+				format:   "json",
+				config:   `{"name":"SATUSEHAT STG FHIR Gateway","enabled":true,"url":"https://api-satusehat-stg.kemkes.go.id/fhir-r4/v1","host":"https://api-satusehat-stg.kemkes.go.id","path":"/fhir-r4/v1","authType":"bearer","token":"{{SATUSEHAT_TOKEN}}"}`,
+				desc:     "Koneksi target gateway ke server SATUSEHAT Staging Kemenkes",
+			},
+			{
+				id:       uuid.New().String(),
+				name:     "SIMRS Database (InterSystems / ODBC)",
+				role:     "source",
+				protocol: "database",
+				format:   "json",
+				config:   `{"driver":"odbc","dsn":"DSN=SIMRS_IRIS;UID=user;PWD=pass;","pollInterval":"60","query":"SELECT id, norm, nama, poli FROM antrean_poli WHERE status='ready'"}`,
+				desc:     "Koneksi polling SQL ke Database SIMRS berbasis ODBC / InterSystems IRIS",
+			},
+			{
+				id:       uuid.New().String(),
+				name:     "LIS Alat Lab MLLP (HL7 v2)",
+				role:     "source",
+				protocol: "tcp",
+				format:   "hl7",
+				config:   `{"port":"9000","ackBehavior":"deferred"}`,
+				desc:     "Listener TCP socket MLLP untuk menerima hasil lab HL7 v2 dari Sysmex/Mindray",
+			},
+		}
+
+		for _, c := range initialConnectors {
+			db.Exec("INSERT INTO connectors (id, name, role, protocol, format, config, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				c.id, c.name, c.role, c.protocol, c.format, c.config, c.desc, now, now)
 		}
 	}
 }
