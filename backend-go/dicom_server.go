@@ -272,9 +272,23 @@ func (s *DicomServer) handleConnection(conn net.Conn) {
 		pduType := header[0]
 		pduLength := binary.BigEndian.Uint32(header[2:6])
 
+		// Validate that pduType is a legitimate DICOM PDU Type (0x01 to 0x07)
+		if pduType < PDUTypeAssociateRQ || pduType > PDUTypeAbort {
+			log.Printf("[DICOM Server] Non-DICOM packet received on port %d (Type: 0x%02X), closing session", s.config.Port, pduType)
+			return
+		}
+
+		// Sanity check: DICOM Upper Layer max PDU length should not exceed 16MB
+		if pduLength > 16*1024*1024 {
+			log.Printf("[DICOM Server] PDU length excessive (%d bytes) for type 0x%02X, closing connection", pduLength, pduType)
+			return
+		}
+
 		pduPayload := make([]byte, pduLength)
 		if _, err := io.ReadFull(conn, pduPayload); err != nil {
-			log.Printf("[DICOM Server] Incomplete PDU payload: %v", err)
+			if err != io.EOF && err != io.ErrUnexpectedEOF {
+				log.Printf("[DICOM Server] Incomplete PDU payload: %v", err)
+			}
 			return
 		}
 
