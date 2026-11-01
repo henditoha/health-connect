@@ -28,6 +28,7 @@ Thumbs.db
 .idea/
 *.log
 *.pem
+docs/
 # Environment & Secrets
 .env
 .env.*

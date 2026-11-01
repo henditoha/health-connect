@@ -79,9 +79,12 @@ func main() {
 
 	r := gin.Default()
 	r.Use(cors.Default())
+	// Security: Cap maximum payload body size to 32 MB to prevent memory exhaustion DoS
+	r.Use(MaxPayloadSizeMiddleware(32 * 1024 * 1024))
 
 	// Management APIs
 	api := r.Group("/api")
+	api.Use(RateLimitMiddleware(GlobalAPILimiter, "api"))
 	{
 		api.GET("/groups", getGroups)
 		api.POST("/groups", createGroup)
@@ -117,7 +120,8 @@ func main() {
 		api.DELETE("/connectors/:id", deleteConnector)
 		api.POST("/connectors/:id/test", testConnectorProfile)
 
-		api.POST("/login", login)
+		// Security: Strict brute-force rate limiter on login endpoint
+		api.POST("/login", RateLimitMiddleware(GlobalLoginLimiter, "login"), login)
 		api.GET("/users", getUsers)
 		api.POST("/users", createUser)
 		api.PUT("/users/:id", updateUser)
@@ -128,8 +132,8 @@ func main() {
 	RegisterDicomRoutes(r)
 	InitDicomServer()
 
-	// Ingress
-	r.POST("/ingress/:routeId", handleIngress)
+	// Ingress: Protected with channel throughput rate limiter
+	r.POST("/ingress/:routeId", IngressRateLimitMiddleware(), handleIngress)
 
 	// Serve Frontend
 	subFS, err := fs.Sub(frontendFS, "dist")

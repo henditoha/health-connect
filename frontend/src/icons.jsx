@@ -57,5 +57,7 @@ export const Edit2 = makeIcon('Edit2', <><path d="M17 3a2.828 2.828 0 1 1 4 4L7.
 export const X = makeIcon('X', <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>);
 export const Scan = makeIcon('Scan', <><path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" /><path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" /><circle cx="12" cy="12" r="3" /></>);
 export const Server = makeIcon('Server', <><rect width="20" height="8" x="2" y="2" rx="2" ry="2" /><rect width="20" height="8" x="2" y="14" rx="2" ry="2" /><line x1="6" x2="6.01" y1="6" y2="6" /><line x1="6" x2="6.01" y1="18" y2="18" /></>);
+export const Lock = makeIcon('Lock', <><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>);
+
 
 

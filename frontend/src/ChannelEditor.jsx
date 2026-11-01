@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Play, Filter, Trash2, Plus, Eye, EyeOff } from './icons';
+import { ArrowLeft, Save, Play, Filter, Trash2, Plus, Lock } from './icons';
 import DatabaseConfigForm from './DatabaseConfigForm';
 
 function VariablesEditor({
@@ -8,9 +8,7 @@ function VariablesEditor({
   variables = {},
   onChange,
   addLabel = "+ Add Variable",
-  varPrefix = "var",
-  visibleVars = {},
-  onToggleVisibility
+  varPrefix = "var"
 }) {
   const entries = Object.entries(variables || {});
 
@@ -64,8 +62,6 @@ function VariablesEditor({
         )}
         {entries.map(([key, val]) => {
           const isSecret = /key|pass|secret|token|cred|auth|pwd|dsn/i.test(key);
-          const varId = `${varPrefix}_${key}`;
-          const isVisible = !!visibleVars[varId];
 
           return (
             <div key={key} style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
@@ -79,31 +75,32 @@ function VariablesEditor({
               <div style={{ flex: 2, display: 'flex', alignItems: 'center', position: 'relative' }}>
                 <input
                   className="form-control"
-                  style={{ width: '100%', fontFamily: 'monospace', paddingRight: isSecret ? '36px' : '10px' }}
-                  type={isSecret && !isVisible ? 'password' : 'text'}
-                  placeholder="Value or secret..."
+                  style={{ width: '100%', fontFamily: 'monospace', paddingRight: isSecret ? '90px' : '10px' }}
+                  type={isSecret ? 'password' : 'text'}
+                  placeholder={isSecret ? '•••••••• (Write-only secret)' : 'Value data...'}
                   value={val || ''}
                   onChange={e => handleValueChange(key, e.target.value)}
                 />
                 {isSecret && (
-                  <button
-                    type="button"
-                    onClick={() => onToggleVisibility?.(varId)}
+                  <span
                     style={{
                       position: 'absolute',
                       right: '8px',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      padding: 0,
-                      color: 'var(--text-muted)',
+                      color: '#059669',
                       display: 'flex',
-                      alignItems: 'center'
+                      alignItems: 'center',
+                      gap: '3px',
+                      fontSize: '0.7rem',
+                      fontWeight: 600,
+                      backgroundColor: '#ecfdf5',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      border: '1px solid #a7f3d0'
                     }}
-                    title={isVisible ? 'Hide value' : 'Show value'}
+                    title="Kredensial tersimpan terenkripsi aman (Write-Only). Nilai tidak dapat di-show."
                   >
-                    {isVisible ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+                    <Lock size={12} /> Encrypted
+                  </span>
                 )}
               </div>
               <button className="btn btn-danger" onClick={() => handleRemove(key)}>
@@ -133,7 +130,6 @@ export default function ChannelEditor({
   onClose,
   isDirty = false
 }) {
-  const [visibleVars, setVisibleVars] = useState({});
   const [registry, setRegistry] = useState({ protocols: [], database_drivers: [], formats: [] });
   const [savedConnectors, setSavedConnectors] = useState([]);
 
@@ -641,8 +637,6 @@ export default function ChannelEditor({
             onChange={next => setEditingRoute({ ...editingRoute, source: { ...editingRoute.source, variables: next } })}
             addLabel="+ Add Source Variable"
             varPrefix="source"
-            visibleVars={visibleVars}
-            onToggleVisibility={k => setVisibleVars(prev => ({ ...prev, [k]: !prev[k] }))}
           />
         </div>
       )}
@@ -1012,8 +1006,6 @@ export default function ChannelEditor({
             onChange={next => updateActiveDestConfig({ variables: next })}
             addLabel="+ Add Destination Variable"
             varPrefix={`dest_${activeDestIdx}`}
-            visibleVars={visibleVars}
-            onToggleVisibility={k => setVisibleVars(prev => ({ ...prev, [k]: !prev[k] }))}
           />
         </div>
       )}

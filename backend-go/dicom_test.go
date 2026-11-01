@@ -144,41 +144,43 @@ func TestDicomCEchoAndCFindNetworkHandshake(t *testing.T) {
 		t.Fatalf("Failed to send C-FIND-RQ: %v", err)
 	}
 
-	// Read C-FIND-RSP (Pending item)
-	findRspHeader := make([]byte, 6)
-	if _, err := io.ReadFull(conn, findRspHeader); err != nil {
-		t.Fatalf("Failed to read C-FIND-RSP header: %v", err)
-	}
-	findRspLen := binary.BigEndian.Uint32(findRspHeader[2:6])
-	findRspPayload := make([]byte, findRspLen)
-	if _, err := io.ReadFull(conn, findRspPayload); err != nil {
-		t.Fatalf("Failed to read C-FIND-RSP payload: %v", err)
-	}
-
-	// Verify Procedure Description redundantly copied to Study Description, Req Proc Description, Series Description
-	fullDatasetText := string(findRspPayload)
+	// Read C-FIND-RSP stream (Pending items followed by StatusSuccess)
 	expectedDesc := "CT Scan Kepala Polos Non Kontras"
-	count := strings.Count(fullDatasetText, expectedDesc)
-	if count < 3 {
-		t.Fatalf("Expected procedure description '%s' to appear at least 3 times (redundant copy to study_desc, req_proc_desc, series_desc), but found %d occurrences", expectedDesc, count)
+	var foundTargetItem bool
+	var totalMatches int
+
+	for {
+		rspHeader := make([]byte, 6)
+		if _, err := io.ReadFull(conn, rspHeader); err != nil {
+			t.Fatalf("Failed to read C-FIND-RSP header: %v", err)
+		}
+		rspLen := binary.BigEndian.Uint32(rspHeader[2:6])
+		rspPayload := make([]byte, rspLen)
+		if _, err := io.ReadFull(conn, rspPayload); err != nil {
+			t.Fatalf("Failed to read C-FIND-RSP payload: %v", err)
+		}
+
+		// Check if it's the final response (Command with Status == 0x0000)
+		if len(rspPayload) >= 6 {
+			cmdMap := parseDicomElements(rspPayload[6:])
+			status := cmdMap.getUint16(0x0000, 0x0900)
+			if status == StatusSuccess {
+				break
+			}
+		}
+
+		totalMatches++
+		payloadText := string(rspPayload)
+		if strings.Contains(payloadText, expectedDesc) {
+			count := strings.Count(payloadText, expectedDesc)
+			if count >= 3 {
+				foundTargetItem = true
+			}
+		}
 	}
 
-	// Read remaining C-FIND responses until final StatusSuccess (0x0000)
-	for {
-		finalRspHeader := make([]byte, 6)
-		if _, err := io.ReadFull(conn, finalRspHeader); err != nil {
-			t.Fatalf("Failed to read final C-FIND-RSP header: %v", err)
-		}
-		finalRspLen := binary.BigEndian.Uint32(finalRspHeader[2:6])
-		finalRspPayload := make([]byte, finalRspLen)
-		if _, err := io.ReadFull(conn, finalRspPayload); err != nil {
-			t.Fatalf("Failed to read final C-FIND-RSP payload: %v", err)
-		}
-		finalCmdMap := parseDicomElements(finalRspPayload[6:])
-		finalStatus := finalCmdMap.getUint16(0x0000, 0x0900)
-		if finalStatus == StatusSuccess {
-			break
-		}
+	if !foundTargetItem {
+		t.Fatalf("Expected procedure description '%s' to appear at least 3 times (redundant copy to study_desc, req_proc_desc, series_desc) across %d matching worklist items", expectedDesc, totalMatches)
 	}
 
 	// 4. Send A-RELEASE-RQ

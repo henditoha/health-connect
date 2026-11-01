@@ -238,6 +238,20 @@ func initDb() error {
 	seedDefaultConnectorRegistry()
 	seedDefaultRadiologyGateway()
 
+	// Ensure all existing secrets in database are encrypted at rest with AES-256-GCM
+	secretRows, err := db.Query("SELECT id, value_data FROM global_variables WHERE is_secret = 1 AND value_data NOT LIKE 'enc:v1:%'")
+	if err == nil {
+		defer secretRows.Close()
+		for secretRows.Next() {
+			var sid, sval string
+			if err := secretRows.Scan(&sid, &sval); err == nil && sval != "" {
+				if enc, err := EncryptSecret(sval); err == nil {
+					db.Exec("UPDATE global_variables SET value_data = ? WHERE id = ?", enc, sid)
+				}
+			}
+		}
+	}
+
 	return nil
 }
 

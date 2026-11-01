@@ -2,6 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Play, Trash2, Edit2, ShieldCheck, KeyRound, Network, RefreshCw, Check, X } from './icons';
 import DatabaseConfigForm from './DatabaseConfigForm';
 
+function maskDsn(dsn) {
+  if (!dsn) return '(not set)';
+  return dsn
+    .replace(/(:\/\/[^:]+:)([^@]+)(@)/, '$1••••••••$3')
+    .replace(/^([^:]+:)([^@]+)(@tcp)/, '$1••••••••$3')
+    .replace(/(pwd|password)\s*=\s*([^;]+)/gi, '$1=••••••••');
+}
+
 export default function ConnectorsView({ apiBase }) {
   const [activeSubTab, setActiveSubTab] = useState('connectors'); // 'connectors' | 'registry'
   const [connectors, setConnectors] = useState([]);
@@ -275,7 +283,7 @@ export default function ConnectorsView({ apiBase }) {
                         {c.protocol === 'database' && (
                           <div>
                             <div><strong>Driver:</strong> {c.config?.driver || 'mysql'}</div>
-                            <div><strong>DSN:</strong> {c.config?.dsn || '(not set)'}</div>
+                            <div><strong>DSN:</strong> {maskDsn(c.config?.dsn)}</div>
                           </div>
                         )}
                         {c.protocol === 'http' && (
